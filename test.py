@@ -1,7 +1,7 @@
 import socket
 import threading
 
-def listen_for_broadcasts():
+def listen_for_broadcasts(my_port):
     """Listens for broadcast messages on the local network and responds to them."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
