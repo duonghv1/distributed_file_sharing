@@ -22,9 +22,9 @@ def listen_for_peers(broadcast_port):
     Listens for broadcast messages from other peers to discover them.
     """
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.bind(('', broadcast_port))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.bind(('', broadcast_port))
+        print(f"Listening for peers on broadcast port {broadcast_port}")
         
         while True:
             data, addr = s.recvfrom(1024)
