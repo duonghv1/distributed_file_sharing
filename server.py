@@ -80,7 +80,7 @@ def request_file(server_host, server_port, filename):
 if __name__ == "__main__":
     base_directory = '/shared/'
     host = '0.0.0.0'
-    server_port = 12345  # Port for serving files
+    server_port = 12348  # Port for serving files
     broadcast_port = 12346  # Port for discovery broadcasts
     
     # Start server to serve files
