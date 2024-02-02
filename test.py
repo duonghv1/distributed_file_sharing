@@ -21,15 +21,18 @@ def listen_for_broadcasts(my_port):
         sock.sendto(response_message, addr)  # Send response to the sender's address and port
 
 def send_broadcast(my_port, target_port):
-    """Sends a broadcast message on the local network from a specific port."""
     message = b'Hello, peers!'
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    
-    # Bind the socket to a specific port number
-    sock.bind(('', my_port))  # Bind to my_port for sending
-    
-    # Send the message to the target_port on all devices in the broadcast address
+
+    try:
+        sock.bind(('', my_port))  # Attempt to bind to the specified port
+    except OSError as e:
+        print(f"Error binding to port {my_port}: {e}")
+        sock.close()  # Ensure the socket is closed before exiting
+        return
+
     sock.sendto(message, ('<broadcast>', target_port))
     sock.close()
 
