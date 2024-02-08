@@ -22,7 +22,7 @@ class PeerNetwork:
                 s.sendto(message, ('<broadcast>', self.broadcast_port))
                 s.sendto(
                     f"FILES:{'.'.join(self.shared_files.keys())}".encode('utf-8'),
-                    self.broadcast_port
+                    ('<broadcast>', self.broadcast_port)
                 )
                 print(f"Broadcasted presence on port {self.broadcast_port}")
                 time.sleep(self.interval)
