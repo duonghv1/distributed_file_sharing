@@ -20,8 +20,9 @@ class PeerNetwork:
             while True:
                 message = f"DISCOVER:{self.server_port}".encode('utf-8')
                 s.sendto(message, ('<broadcast>', self.broadcast_port))
+                my_files = [f for f in os.listdir(self.base_directory) if not f.startswith('.')]
                 s.sendto(
-                    f"FILES:{'.'.join(self.shared_files.keys())}".encode('utf-8'),
+                    f"FILES:{'.'.join(my_files)}".encode('utf-8'),
                     ('<broadcast>', self.broadcast_port)
                 )
                 print(f"Broadcasted presence on port {self.broadcast_port}")
@@ -41,7 +42,8 @@ class PeerNetwork:
                     print(f"Discovered peer at {addr[0]}:{server_port}")
                 elif message.startswith("FILES:"):
                     files = message.split(":")[1].split(".")
-                    print(files)
+                    server_port = message.split(":")[1]
+                    self.shared_files[server_port] = files
 
     def handle_client(self, conn, addr):
         """Handles incoming client connections and serves files from the base directory."""
@@ -79,6 +81,6 @@ class PeerNetwork:
         threading.Thread(target=self.listen_for_peers).start()
 
 if __name__ == "__main__":
-    base_directory = '/files/'  # Adjust as per your directory structure
+    base_directory = './files/'  # Adjust as per your directory structure
     peer_network = PeerNetwork(base_directory)
     peer_network.run()
