@@ -1,7 +1,7 @@
 import hashlib
 
 
-def hash_265(file_path):
+def hash_256(file_path):
     """Takes the file path and returns the hash of the file using SHA256"""
     hash256 = hashlib.sha256()
     with open(file_path, 'rb') as f:
