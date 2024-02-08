@@ -2,6 +2,7 @@ import socket
 import threading
 import time
 import os
+import json
 
 class PeerNetwork:
     def __init__(self, base_directory, host='0.0.0.0', server_port=12348, broadcast_port=12346, interval=5):
@@ -19,12 +20,20 @@ class PeerNetwork:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             while True:
                 message = f"DISCOVER:{self.server_port}".encode('utf-8')
-                s.sendto(message, ('<broadcast>', self.broadcast_port))
+                s.sendto(self.serialize(
+                    {
+                        'type': 'DISCOVER',
+                        'server_port': self.server_port
+                    }
+                ), ('<broadcast>', self.broadcast_port))
                 my_files = [f for f in os.listdir(self.base_directory) if not f.startswith('.')]
-                s.sendto(
-                    f"FILES:{'.'.join(my_files)}".encode('utf-8'),
-                    ('<broadcast>', self.broadcast_port)
-                )
+                s.sendto(self.serialize(
+                    {
+                        'type': 'FILES',
+                        'server_port': self.server_port,
+                        'files': my_files
+                    }
+                ), ('<broadcast>', self.broadcast_port))
                 print(f"Broadcasted presence on port {self.broadcast_port}")
                 time.sleep(self.interval)
 
@@ -36,14 +45,14 @@ class PeerNetwork:
             print(f"Listening for peers on broadcast port {self.broadcast_port}")
             while True:
                 data, addr = s.recvfrom(1024)
-                message = data.decode('utf-8')
-                if message.startswith("DISCOVER:"):
-                    server_port = message.split(":")[1]
+                message = self.deserialize(data)
+                if message['type'] == "DISCOVER":
+                    server_port = message['server_port']
                     print(f"Discovered peer at {addr[0]}:{server_port}")
-                elif message.startswith("FILES:"):
-                    files = message.split(":")[1].split(".")
-                    server_port = message.split(":")[1]
-                    self.shared_files[server_port] = files
+                elif message['type'] == "FILES":
+                    files = message['files']
+                    self.shared_files[addr[0]] = files
+                    print(self.shared_files)
 
     def handle_client(self, conn, addr):
         """Handles incoming client connections and serves files from the base directory."""
@@ -73,6 +82,14 @@ class PeerNetwork:
                 conn, addr = s.accept()
                 client_thread = threading.Thread(target=self.handle_client, args=(conn, addr))
                 client_thread.start()
+
+    def serialize(self, data):
+        """Serializes the given data to a JSON string."""
+        return json.dumps(data).encode('utf-8')
+
+    def deserialize(self, data):
+        """Decodes the given JSON string to reconstruct the original data."""
+        return json.loads(data.decode('utf-8'))
 
     def run(self):
         """Starts the peer network services."""
