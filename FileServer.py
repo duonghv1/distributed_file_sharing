@@ -95,16 +95,16 @@ class PeerNetwork:
 
     def command_prompt(self):
         """Prompts user for file hash to request. Returns the file that the user requests, and the list of peers with that file."""
+        if not self.shared_files:
+            return ()
+        
         peers_with_file = []
-        print("Lists of files available for requesting: ")
         print(self.shared_files)
         
         requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
         if requested_file.lower() == 'exit':
             return None  # Exit the loop to terminate the command prompt thread
 
-        if not self.shared_files:
-            print("No files available for share yet. Try again later.")
         
         for peer_ip, files in self.shared_files.items():
             # file_name, file_hash = file
@@ -121,19 +121,24 @@ class PeerNetwork:
             self.file_store.load_files()
             time.sleep(self.interval)
 
+
     def process_user_input(self):
         while True:
-            if not self.command_prompt():
-                break
-
+            if self.command_prompt() == None:
+                return 
+            
+        
     def run(self):
         """Starts the peer network services."""
-        # threading.Thread(target=self.start_server).start()
+        threading.Thread(target=self.start_server).start()
         threading.Thread(target=self.broadcast_presence).start()
         threading.Thread(target=self.listen_for_peers).start()
-        threading.Thread(target=self.refresh_local_files()).start()
-        # TODO: add start up prompt
-        threading.Thread(target=self.process_user_input).start() 
+        threading.Thread(target=self.refresh_local_files).start()
+        threading.Thread(target=self.process_user_input).start()
+        
+
+       
+
 
 
 if __name__ == "__main__":
