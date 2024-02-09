@@ -4,6 +4,7 @@ import time
 import os
 import json
 import filestore
+import fileshare
 
 
 class PeerNetwork:
@@ -15,7 +16,7 @@ class PeerNetwork:
         self.interval = interval
         self.peers = set()
         self.file_store = filestore.FileStore(base_directory)
-        self.shared_files = {} # IP Address: List of Files; each file is a tuple containing (file_name, hash)
+        self.shared_files = fileshare.FileShare() # IP Address: List of Files; each file is a tuple containing (file_name, hash)
         self.stop_threads = False
 
     def broadcast_presence(self):
@@ -53,15 +54,7 @@ class PeerNetwork:
                     server_port = message['server_port']
                     print(f"Discovered peer at {addr[0]}:{server_port}")
                 elif message['type'] == "FILES":
-                    files = message['files']
-                    for file in files:
-                        file_hash, file_name, file_size = file['hash'], file['file_name'], file['file_size']
-                        if file_hash in self.shared_files:
-                            self.shared_files[file_hash]['ips'].add(addr[0])
-                            self.shared_files[file_hash]['names'].add(file_name)
-                        else:
-                            self.shared_files[file_hash] = {'ips': {addr[0]}, 'names': {file_name}, 'size': file_size}
-                    print(self.shared_files)
+                    self.shared_files.receive_data(addr[0], message['files'])
 
     def handle_client(self, conn, addr):
         """Handles incoming client connections and serves files from the base directory."""
@@ -155,7 +148,6 @@ class PeerNetwork:
         
 
        
-
 
 
 if __name__ == "__main__":
