@@ -3,6 +3,8 @@ import threading
 import time
 import os
 import json
+import filestore
+
 
 class PeerNetwork:
     def __init__(self, base_directory, host='0.0.0.0', server_port=12348, broadcast_port=12346, interval=5):
@@ -12,14 +14,14 @@ class PeerNetwork:
         self.broadcast_port = broadcast_port
         self.interval = interval
         self.peers = set()
-        self.shared_files = {}
+        self.file_store = filestore.FileStore(base_directory)
+        self.shared_files = {} # IP Address: List of Files; each file is a tuple containing (file_name, hash)
 
     def broadcast_presence(self):
         """Broadcasts this server's presence to the network every 'interval' seconds."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             while True:
-                message = f"DISCOVER:{self.server_port}".encode('utf-8')
                 s.sendto(self.serialize(
                     {
                         'type': 'DISCOVER',
@@ -31,7 +33,7 @@ class PeerNetwork:
                     {
                         'type': 'FILES',
                         'server_port': self.server_port,
-                        'files': my_files
+                        'files': self.file_store.get_files()
                     }
                 ), ('<broadcast>', self.broadcast_port))
                 print(f"Broadcasted presence on port {self.broadcast_port}")
@@ -91,11 +93,47 @@ class PeerNetwork:
         """Decodes the given JSON string to reconstruct the original data."""
         return json.loads(data.decode('utf-8'))
 
+    def command_prompt(self):
+        """Prompts user for file hash to request. Returns the file that the user requests, and the list of peers with that file."""
+        peers_with_file = []
+        print("Lists of files available for requesting: ")
+        print(self.shared_files)
+        
+        requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
+        if requested_file.lower() == 'exit':
+            return None  # Exit the loop to terminate the command prompt thread
+
+        if not self.shared_files:
+            print("No files available for share yet. Try again later.")
+        
+        for peer_ip, files in self.shared_files.items():
+            # file_name, file_hash = file
+            if requested_file in files: # file_hash:
+                peers_with_file.append(peer_ip)
+                
+        print((requested_file, peers_with_file))
+        return (requested_file, peers_with_file)
+        # TODO: algorithm for requesting file from peers with this information
+
+    def refresh_local_files(self):
+        """Refreshes local files available for sharing."""
+        while True:
+            self.file_store.load_files()
+            time.sleep(self.interval)
+
+    def process_user_input(self):
+        while(True):
+            if not self.command_prompt():
+                break
+
     def run(self):
         """Starts the peer network services."""
         # threading.Thread(target=self.start_server).start()
         threading.Thread(target=self.broadcast_presence).start()
         threading.Thread(target=self.listen_for_peers).start()
+        threading.Thread(target=self.refresh_local_files()).start()
+        # TODO: add start up prompt
+        threading.Thread(target=self.process_user_input).start() 
 
 if __name__ == "__main__":
     base_directory = './files/'  # Adjust as per your directory structure
