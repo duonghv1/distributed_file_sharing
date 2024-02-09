@@ -53,7 +53,13 @@ class PeerNetwork:
                     print(f"Discovered peer at {addr[0]}:{server_port}")
                 elif message['type'] == "FILES":
                     files = message['files']
-                    self.shared_files[addr[0]] = files
+                    for file in files:
+                        file_hash, file_name, file_size = file['hash'], file['file_name'], file['file_size']
+                        if file_hash in self.shared_files:
+                            self.shared_files[file_hash]['ips'].add(addr[0])
+                            self.shared_files[file_hash]['names'].add(file_name)
+                        else:
+                            self.shared_files[file_hash] = {'ips': {addr[0]}, 'names': {file_name}, 'size': file_size}
                     print(self.shared_files)
 
     def handle_client(self, conn, addr):
