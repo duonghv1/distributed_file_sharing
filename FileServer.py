@@ -122,7 +122,7 @@ class PeerNetwork:
             time.sleep(self.interval)
 
     def process_user_input(self):
-        while(True):
+        while True:
             if not self.command_prompt():
                 break
 
@@ -134,6 +134,7 @@ class PeerNetwork:
         threading.Thread(target=self.refresh_local_files()).start()
         # TODO: add start up prompt
         threading.Thread(target=self.process_user_input).start() 
+
 
 if __name__ == "__main__":
     base_directory = './files/'  # Adjust as per your directory structure

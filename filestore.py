@@ -1,7 +1,6 @@
 import hashlib
 import os
 
-
 class File:
     def __init__(self, file_path):
         self.file_name = file_path.split('/')[-1]
@@ -24,8 +23,8 @@ class FileStore:
     def load_files(self):
         files = []
         for f in os.listdir(self.base_directory):
-            if not f.startswith('.'):
-                file_path = os.path.join(self.base_directory, f)
+            file_path = os.path.join(self.base_directory, f)
+            if os.path.isfile(file_path):
                 files.append(File(file_path).to_dict())
         self.files = files
 
