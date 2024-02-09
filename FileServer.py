@@ -12,7 +12,7 @@ class PeerNetwork:
         self.broadcast_port = broadcast_port
         self.interval = interval
         self.peers = set()
-        self.shared_files = {} # IP Address: List of Files; each file is a tuple containing (file_name, hash)
+        self.shared_files = {}
 
     def broadcast_presence(self):
         """Broadcasts this server's presence to the network every 'interval' seconds."""
@@ -26,7 +26,7 @@ class PeerNetwork:
                         'server_port': self.server_port
                     }
                 ), ('<broadcast>', self.broadcast_port))
-                my_files = [f for f in os.listdir(self.base_directory) if not f.startswith('.')]
+                my_files = [f for f in os.listdir(self.base_directory) if not f.startswith('.') and os.path.isfile(f)]
                 s.sendto(self.serialize(
                     {
                         'type': 'FILES',
@@ -34,7 +34,7 @@ class PeerNetwork:
                         'files': my_files
                     }
                 ), ('<broadcast>', self.broadcast_port))
-                # print(f"Broadcasted presence on port {self.broadcast_port}")
+                print(f"Broadcasted presence on port {self.broadcast_port}")
                 time.sleep(self.interval)
 
     def listen_for_peers(self):
@@ -48,11 +48,11 @@ class PeerNetwork:
                 message = self.deserialize(data)
                 if message['type'] == "DISCOVER":
                     server_port = message['server_port']
-                    # print(f"Discovered peer at {addr[0]}:{server_port}")
+                    print(f"Discovered peer at {addr[0]}:{server_port}")
                 elif message['type'] == "FILES":
                     files = message['files']
                     self.shared_files[addr[0]] = files
-                    # print(self.shared_files)
+                    print(self.shared_files)
 
     def handle_client(self, conn, addr):
         """Handles incoming client connections and serves files from the base directory."""
@@ -91,42 +91,11 @@ class PeerNetwork:
         """Decodes the given JSON string to reconstruct the original data."""
         return json.loads(data.decode('utf-8'))
 
-    def command_prompt(self):
-        """Prompts user for file hash to request. Returns the file that the user requests, and the list of peers with that file."""
-        peers_with_file = []
-        print("Lists of files available for requesting: ")
-        print(self.shared_files)
-        
-        requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
-        if requested_file.lower() == 'exit':
-            return None  # Exit the loop to terminate the command prompt thread
-
-        if not self.shared_files:
-            print("No files available for share yet. Try again later.")
-        
-        for peer_ip, files in self.shared_files.items():
-            # file_name, file_hash = file
-            if requested_file in files: # file_hash:
-                peers_with_file.append(peer_ip)
-                
-        print((requested_file, peers_with_file))
-        return (requested_file, peers_with_file)
-        # TODO: algorithm for requesting file from peers with this information
-    
-
-    def process_user_input(self):
-        while(True):
-            if not self.command_prompt():
-                break
-
     def run(self):
         """Starts the peer network services."""
-        
         # threading.Thread(target=self.start_server).start()
         threading.Thread(target=self.broadcast_presence).start()
         threading.Thread(target=self.listen_for_peers).start()
-        # TODO: add start up prompt
-        threading.Thread(target=self.process_user_input).start() 
 
 if __name__ == "__main__":
     base_directory = './files/'  # Adjust as per your directory structure
