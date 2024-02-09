@@ -16,12 +16,13 @@ class PeerNetwork:
         self.peers = set()
         self.file_store = filestore.FileStore(base_directory)
         self.shared_files = {} # IP Address: List of Files; each file is a tuple containing (file_name, hash)
+        self.stop_threads = False
 
     def broadcast_presence(self):
         """Broadcasts this server's presence to the network every 'interval' seconds."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            while True:
+            while not self.stop_threads:
                 s.sendto(self.serialize(
                     {
                         'type': 'DISCOVER',
@@ -45,7 +46,7 @@ class PeerNetwork:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(('', self.broadcast_port))
             print(f"Listening for peers on broadcast port {self.broadcast_port}")
-            while True:
+            while not self.stop_threads:
                 data, addr = s.recvfrom(1024)
                 message = self.deserialize(data)
                 if message['type'] == "DISCOVER":
@@ -80,7 +81,7 @@ class PeerNetwork:
             s.bind((self.host, self.server_port))
             s.listen()
             print(f"Listening on {self.host}:{self.server_port}")
-            while True:
+            while not self.stop_threads:
                 conn, addr = s.accept()
                 client_thread = threading.Thread(target=self.handle_client, args=(conn, addr))
                 client_thread.start()
@@ -117,24 +118,34 @@ class PeerNetwork:
 
     def refresh_local_files(self):
         """Refreshes local files available for sharing."""
-        while True:
+        while not self.stop_threads:
             self.file_store.load_files()
             time.sleep(self.interval)
 
 
-    def process_user_input(self):
-        while True:
-            if self.command_prompt() == None:
-                return 
+    # def process_user_input(self):
+         
             
         
     def run(self):
         """Starts the peer network services."""
-        threading.Thread(target=self.start_server).start()
-        threading.Thread(target=self.broadcast_presence).start()
-        threading.Thread(target=self.listen_for_peers).start()
-        threading.Thread(target=self.refresh_local_files).start()
-        threading.Thread(target=self.process_user_input).start()
+        threads = [
+            # threading.Thread(target=self.start_server), -- TODO: debug this, was raising an OSError
+            threading.Thread(target=self.broadcast_presence),
+            threading.Thread(target=self.listen_for_peers),
+            threading.Thread(target=self.refresh_local_files),
+        ]
+        for thread in threads:
+            thread.start()
+        
+        while True:
+            if self.command_prompt() == None:
+                self.stop_threads = True
+                for thread in threads:
+                    thread.join()
+                return
+        
+        
         
 
        
