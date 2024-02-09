@@ -1,7 +1,9 @@
 import hashlib
 import os
 
+
 class File:
+    """Class to represent a file and its attributes."""
     def __init__(self, file_path):
         self.file_name = file_path.split('/')[-1]
         self.hash = hash_256(file_path)
@@ -12,6 +14,7 @@ class File:
 
 
 class FileStore:
+    """Class to store files in a directory and load them into memory."""
     def __init__(self, base_directory):
         self.base_directory = base_directory
         self.files = []
@@ -21,10 +24,11 @@ class FileStore:
         return self.files
 
     def load_files(self):
+        """Load files from local base directory"""
         files = []
         for f in os.listdir(self.base_directory):
             file_path = os.path.join(self.base_directory, f)
-            if os.path.isfile(file_path):
+            if os.path.isfile(file_path) and not f.startswith('.'):
                 files.append(File(file_path).to_dict())
         self.files = files
 
