@@ -26,7 +26,7 @@ class PeerNetwork:
                         'server_port': self.server_port
                     }
                 ), ('<broadcast>', self.broadcast_port))
-                my_files = [f for f in os.listdir(self.base_directory) if not f.startswith('.') and os.path.isfile(f)]
+                my_files = [f for f in os.listdir(self.base_directory) if os.path.isfile(os.path.join(self.base_directory, f)) and not f.startswith('.')]
                 s.sendto(self.serialize(
                     {
                         'type': 'FILES',
