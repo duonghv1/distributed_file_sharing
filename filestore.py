@@ -3,7 +3,7 @@ import os
 
 
 class File:
-    """Class to represent a file and its attributes."""
+    """Class to represent a local file and its attributes."""
     def __init__(self, file_path):
         self.file_name = file_path.split('/')[-1]
         self.hash = hash_256(file_path)
