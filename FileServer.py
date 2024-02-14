@@ -95,22 +95,19 @@ class PeerNetwork:
 
     def command_prompt(self):
         """Prompts user for file hash to request. Returns the file that the user requests, and the list of peers with that file."""
-        if not self.shared_files:
+        if self.shared_files.is_empty():
             return ()
         
         peers_with_file = []
-        print(self.shared_files)
+        file_dict = self.shared_files.refresh_data()
+        print(file_dict)
         
         requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
         if requested_file.lower() == 'exit':
             return None  # Exit the loop to terminate the command prompt thread
 
-        
-        for peer_ip, files in self.shared_files.items():
-            # file_name, file_hash = file
-            if requested_file in files: # file_hash:
-                peers_with_file.append(peer_ip)
-                
+        peers_with_file = self.shared_files.get_peers_with_file(requested_file)
+          
         print((requested_file, peers_with_file))
         return (requested_file, peers_with_file)
         # TODO: algorithm for requesting file from peers with this information
