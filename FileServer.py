@@ -163,10 +163,6 @@ class PeerNetwork:
             time.sleep(self.interval)
 
 
-    # def process_user_input(self):
-         
-            
-        
     def run(self):
         """Starts the peer network services."""
         threads = [
