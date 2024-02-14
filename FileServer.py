@@ -8,6 +8,9 @@ import fileshare
 
 
 class PeerNetwork:
+
+    CHUNK_SIZE = 32
+
     def __init__(self, base_directory, host='0.0.0.0', server_port=12348, broadcast_port=12346, interval=5):
         self.base_directory = base_directory
         self.host = host
@@ -99,18 +102,59 @@ class PeerNetwork:
             return ()
         
         peers_with_file = []
-        file_dict = self.shared_files.refresh_data()
-        print(file_dict)
+        print(self.shared_files.get_hash_to_info())
         
         requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
         if requested_file.lower() == 'exit':
             return None  # Exit the loop to terminate the command prompt thread
 
-        peers_with_file = self.shared_files.get_peers_with_file(requested_file)
+        self.request_file(requested_file)
+        # peers_with_file = self.shared_files.get_peers_with_file(requested_file)
           
-        print((requested_file, peers_with_file))
-        return (requested_file, peers_with_file)
-        # TODO: algorithm for requesting file from peers with this information
+        # print((requested_file, peers_with_file))
+        # return (requested_file, peers_with_file)
+        # # TODO: algorithm for requesting file from peers with this information
+
+    def request_chunk(self, ip, fhash, chunk_index):
+        """Return the data requsted"""
+        print(f"Requested chunk {chunk_index} of {fhash} from {ip}")
+        return f"Requested chunk {chunk_index} of {fhash} from {ip}"
+        pass # Merge with Linda's code
+
+    def request_chunks(self, ip, fhash, chunk_queue):
+        """
+        Returns: a dictionary that maps the chunk index to the data, as well as the remaining chunk index queue that hasn't been processed, if any.
+        """
+        cidx_to_data = {}
+
+        while chunk_queue:
+            try:
+                data = self.request_chunk(ip, fhash, chunk_queue[0])
+                cidx_to_data[chunk_queue.pop(0)] = data # if successful, pop from queue
+            except:
+                return cidx_to_data, chunk_queue
+
+        return cidx_to_data, chunk_queue
+
+    def request_file(self, fhash):
+        """return true if file request succeeded, else returns false"""
+        peers = self.shared_files.get_peers_with_file(fhash)
+        size = self.shared_files.get_size_of_file(fhash)
+        num_chunks = math.ceil(size/CHUNK_SIZE)
+
+        idx_to_ip = {idx : peer for idx, peer in enumerate(peers)}
+        ips_to_chunk_indices = {peer: [] for peer in peers}
+        for cidx in num_chunks:
+            pidx = cidx % num_chunks
+            ips_to_chunk_indices[idx_to_ip[pidx]].append(cidx)
+        
+        # threads = []
+        # for ip, cqueue in ips_to_chunk_indices.items():
+        #     threads.append(threading.Thread(target=self.request_chunks, args=(ip, fhash, cqueue)))
+        
+        # TODO: call request_chunks, use threading to try to do it concurrently for each thread.
+        # take the result of request_chunks and if there are still items yet to be processed in the chunk_queue,
+        # remove that peer, and redistribute it, round robin style, to the rest of the peers
 
     def refresh_local_files(self):
         """Refreshes local files available for sharing."""
