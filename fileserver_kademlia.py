@@ -81,9 +81,13 @@ class PeerNetwork:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Start a peer node and share files.")
     parser.add_argument("--port", type=int, help="The port to listen on.")
+    parser.add_argument("--bootstrap", type=str, help="The address of the bootstrap node.")
     base_directory = './files/'  # Adjust as per your directory structure
     args = parser.parse_args()
-    if args.port:
-        peer_network = PeerNetwork(base_directory, broadcast_port=args.port)
+    if args.port and args.bootstrap:
+        bootstrap_ip, bootstrap_port = args.bootstrap.split(":")
+        bootstrap_addr = (bootstrap_ip, int(bootstrap_port))
+        peer_network = PeerNetwork(base_directory, broadcast_port=args.port, bootstrap_addr=bootstrap_addr)
+
         peer_network.run()
 
