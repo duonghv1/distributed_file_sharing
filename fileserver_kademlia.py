@@ -9,9 +9,8 @@ import asyncio
 import argparse
 
 class PeerNetwork:
-    def __init__(self, base_directory, host='0.0.0.0', broadcast_port=8467, interval=5):
+    def __init__(self, base_directory, broadcast_port=9001, bootstrap_addr=("0.0.0.0", 9000), interval=5):
         self.base_directory = base_directory
-        self.host = host
         self.broadcast_port = broadcast_port
         self.interval = interval
 
@@ -19,12 +18,12 @@ class PeerNetwork:
         self.debug = False
         self.kademlia_server = Server()
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.init_kademlia())
+        loop.run_until_complete(self.init_kademlia(bootstrap_addr))
         loop.run_until_complete(self.share_files())
 
-    async def init_kademlia(self):
+    async def init_kademlia(self, boostrap_addr):
         await self.kademlia_server.listen(self.broadcast_port)
-        await self.kademlia_server.bootstrap([(self.host, self.broadcast_port)])
+        await self.kademlia_server.bootstrap([boostrap_addr])
 
     async def share_files(self):
         for file in self.file_store.get_files():
