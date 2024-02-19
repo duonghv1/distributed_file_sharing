@@ -1,7 +1,7 @@
 import os
 import math
 
-def file_chunking(filepath, chunk_size, chunk_ind):
+def get_file_chunk(filepath, chunk_size, chunk_ind):
     # return the requested chunk based on chunk index of the specified file path in bytes
     filesize = os.path.getsize(filepath)
     chunk_start_pos = chunk_ind * chunk_size

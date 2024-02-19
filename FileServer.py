@@ -5,7 +5,7 @@ import os
 import json
 import filestore
 import fileshare
-from filechunking import combine_chunks
+from filechunking import combine_chunks, get_file_chunk
 import math
 
 class PeerNetwork:
@@ -14,12 +14,13 @@ class PeerNetwork:
 
     def __init__(self, base_directory, host='0.0.0.0', server_port=12348, broadcast_port=12346, interval=5):
         self.base_directory = base_directory
+        self.__chunksize = 32
         self.host = host
         self.server_port = server_port
         self.broadcast_port = broadcast_port
         self.interval = interval
         self.peers = set()
-        self.file_store = filestore.FileStore(base_directory)
+        self.file_store = filestore.FileStore(base_directory)  # handle local directory  
         self.shared_files = fileshare.FileShare() # IP Address: List of Files; each file is a tuple containing (file_name, hash)
         self.stop_threads = False
 
@@ -64,35 +65,20 @@ class PeerNetwork:
         """Handles incoming client connections and serves files from the base directory."""
         print(f"Connection from {addr}")
         try:
-            message = conn.recv(1024).decode('utf-8')
-            print("MESSAGE is", message)
-            print(self.shared_files.get_hash_to_info())
-            # algo to find the local filepath corresponding to the file hash
-            # filepath = os.path.join(self.base_directory, filename)
-            # filepath = os.path.join(self.base_directory, filename)
-            # if os.path.exists(filepath):
-            #     with open(filepath, 'rb') as f:
-            #         data = f.read()
-            #         conn.sendall(data)
-            #     print(f"Sent {filename} to {addr}")
-            # else:
-            #     conn.sendall(b'File not found')
+            message_parts = conn.recv(1024).decode('utf-8').split()
+            print("MESSAGE is", message_parts)
+            if message_parts[0] == "GET_CHUNK":
+                fhash = message_parts[1]
+                chunk_index = int(message_parts[2])
+                fileobj = self.file_store.find_file_by_hash(fhash)
+                chunk = get_file_chunk(fileobj.filepath, self.__chunksize, chunk_index)
+                print("CHUNK is", chunk)
+                message = f"CHUNK RECEIVED {fhash} {idx} {chunk}"
+                conn.sendall(message.encode())
         except Exception as e:
             print(f"Error: {e}")
         finally:
             conn.close()
-
-            # while True:
-            # data = connection.recv(1024)
-            # if not data:
-            #     break
-            # message = data.decode()
-            # command, fhash, chunk_index = message.split()
-            # if command == "GET_CHUNK":
-            #     # Here you would retrieve the requested chunk and send it back
-            #     # You might need to implement this part based on your specific application
-            #     # For simplicity, I'll just send back a confirmation message
-            #     connection.sendall(b"Chunk sent successfully")
 
     def start_server(self):
         """Starts a TCP server to serve files to peers."""
@@ -131,27 +117,27 @@ class PeerNetwork:
             print("The file you've requested is not available. Please try again.")
             return False
 
-        # success, data = self.request_file(requested_file)
+        success, data = self.request_file(requested_file)
 
-        # if not success:
-        #     print("Request unsuccessful. Please try again.")
-        #     return False
+        if not success:
+            print("Request unsuccessful. Please try again.")
+            return False
         
-        # chunks = [fdata for fidx, fdata in sorted(data.items())]
+        chunks = [fdata for fidx, fdata in sorted(data.items())]
 
-        # file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
-        # try:
-        #     filepath = combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
-        #     print(f"File saved successfully at {filepath}.")
-        #     return True
-        # except:
-        #     print("Error when saving the file.")
-        #     return False
+        file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        try:
+            filepath = combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
+            print(f"File saved successfully at {filepath}.")
+            return True
+        except:
+            print("Error when saving the file.")
+            return False
         
-        print("TEST request chunk")
-        ip = input("Enter ip: ").strip()
+        # print("TEST request chunk")
+        # ip = input("Enter ip: ").strip()
 
-        self.request_chunk(ip, requested_file, 0)
+        # self.request_chunk(ip, requested_file, 0)
         
 
     def request_chunk(self, ip, fhash, chunk_index):
@@ -173,13 +159,11 @@ class PeerNetwork:
             # Receive response
             response = s.recv(1024)  # Adjust buffer size as needed
             data = response.decode()
-            print(f"Received chunk #{chunk_index} from {ip} with data: {data}")
+            print(f"Received message: {data}")
         
         return data
     
-    
         
-
     def request_chunks(self, ip, fhash, chunk_queue):
         """
         Returns: a dictionary that maps the chunk index to the data, as well as the remaining chunk index queue that hasn't been processed, if any.
