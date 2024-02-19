@@ -73,7 +73,7 @@ class PeerNetwork:
                 fileobj = self.file_store.find_file_by_hash(fhash)
                 chunk = get_file_chunk(fileobj.filepath, self.__chunksize, chunk_index)
                 print("CHUNK is", chunk)
-                message = f"CHUNK RECEIVED {fhash} {idx} {chunk}"
+                message = f"CHUNK RECEIVED {fhash} {chunk_index} {chunk}"
                 conn.sendall(message.encode())
         except Exception as e:
             print(f"Error: {e}")
@@ -117,27 +117,27 @@ class PeerNetwork:
             print("The file you've requested is not available. Please try again.")
             return False
 
-        success, data = self.request_file(requested_file)
+        # success, data = self.request_file(requested_file)
 
-        if not success:
-            print("Request unsuccessful. Please try again.")
-            return False
+        # if not success:
+        #     print("Request unsuccessful. Please try again.")
+        #     return False
         
-        chunks = [fdata for fidx, fdata in sorted(data.items())]
+        # chunks = [fdata for fidx, fdata in sorted(data.items())]
 
-        file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
-        try:
-            filepath = combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
-            print(f"File saved successfully at {filepath}.")
-            return True
-        except:
-            print("Error when saving the file.")
-            return False
+        # file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        # try:
+        #     filepath = combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
+        #     print(f"File saved successfully at {filepath}.")
+        #     return True
+        # except:
+        #     print("Error when saving the file.")
+        #     return False
         
-        # print("TEST request chunk")
-        # ip = input("Enter ip: ").strip()
+        print("TEST request chunk")
+        ip = input("Enter ip: ").strip()
 
-        # self.request_chunk(ip, requested_file, 0)
+        self.request_chunk(ip, requested_file, 0)
         
 
     def request_chunk(self, ip, fhash, chunk_index):
