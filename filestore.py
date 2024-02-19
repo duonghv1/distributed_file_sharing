@@ -5,9 +5,11 @@ import os
 class File:
     """Class to represent a local file and its attributes."""
     def __init__(self, file_path):
-        self.file_name = file_path.split('/')[-1]
+        name, ext = os.path.splitext(file_path)
+        self.file_name = name
         self.hash = hash_256(file_path)
         self.file_size = os.path.getsize(file_path)
+        self.file_ext = ext
 
     def to_dict(self):
         return self.__dict__

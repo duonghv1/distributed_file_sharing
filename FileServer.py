@@ -5,6 +5,7 @@ import os
 import json
 import filestore
 import fileshare
+from filechunking import combine_chunks
 
 
 class PeerNetwork:
@@ -97,23 +98,37 @@ class PeerNetwork:
         return json.loads(data.decode('utf-8'))
 
     def command_prompt(self):
-        """Prompts user for file hash to request. Returns the file that the user requests, and the list of peers with that file."""
+        """Prompts user for file hash to request. If request successful, writes the data into the user's folder and returns True."""
         if self.shared_files.is_empty():
-            return ()
+            print("No files are currently available for share.")
+            return False
         
-        peers_with_file = []
         print(self.shared_files.get_hash_to_info())
         
         requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
         if requested_file.lower() == 'exit':
             return None  # Exit the loop to terminate the command prompt thread
 
-        self.request_file(requested_file)
-        # peers_with_file = self.shared_files.get_peers_with_file(requested_file)
-          
-        # print((requested_file, peers_with_file))
-        # return (requested_file, peers_with_file)
-        # # TODO: algorithm for requesting file from peers with this information
+        files = self.shared_files.get_hash_to_info()
+        if requested_file not in files:
+            print("The file you've requested is not available. Please try again.")
+            return False
+
+        success, data = self.request_file(requested_file)
+        chunks = [fdata for fidx, fdata in sorted(data.items())]
+
+        if not success:
+            print("Request unsuccessful. Please try again.")
+            return False
+
+        file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        try:
+            combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
+            print("File saved successfully.")
+            return True
+        except:
+            print("Error when saving the file.")
+            return False
 
     def request_chunk(self, ip, fhash, chunk_index):
         """Return the data requsted"""
@@ -131,10 +146,28 @@ class PeerNetwork:
             try:
                 data = self.request_chunk(ip, fhash, chunk_queue[0])
                 cidx_to_data[chunk_queue.pop(0)] = data # if successful, pop from queue
-            except:
-                return cidx_to_data, chunk_queue
+            except Exception as e:
+                print(f"Error requesting chunk from {ip}: {e}")
+                break
 
         return cidx_to_data, chunk_queue
+
+    def round_robin(self, peers, chunks):
+        """Distribute chunks among peers in a round-robin fashion"""
+        # the end result is ips_to_chunk_indices: each ip is mapped to a queue of chunk indices.
+        idx_to_ip = {idx : peer for idx, peer in enumerate(peers)}
+        ips_to_chunk_indices = {peer : [] for peer in peers}
+        for cidx in chunks:
+            pidx = cidx % len(peers)
+            ips_to_chunk_indices[idx_to_ip[pidx]].append(cidx)
+
+        return ips_to_chunk_indices
+
+    def request_chunks_wrapper(self, ip, fhash, chunk_queue, result_lock, global_results):
+        data, remaining_queue = self.request_chunks(ip, fhash, chunk_queue)
+        with result_lock:
+            global_results["data"].update(data)
+            global_results["remaining"].extend(remaining_queue)
 
     def request_file(self, fhash):
         """return true if file request succeeded, else returns false"""
@@ -142,19 +175,38 @@ class PeerNetwork:
         size = self.shared_files.get_size_of_file(fhash)
         num_chunks = math.ceil(size/CHUNK_SIZE)
 
-        idx_to_ip = {idx : peer for idx, peer in enumerate(peers)}
-        ips_to_chunk_indices = {peer: [] for peer in peers}
-        for cidx in num_chunks:
-            pidx = cidx % num_chunks
-            ips_to_chunk_indices[idx_to_ip[pidx]].append(cidx)
-        
-        # threads = []
-        # for ip, cqueue in ips_to_chunk_indices.items():
-        #     threads.append(threading.Thread(target=self.request_chunks, args=(ip, fhash, cqueue)))
-        
-        # TODO: call request_chunks, use threading to try to do it concurrently for each thread.
-        # take the result of request_chunks and if there are still items yet to be processed in the chunk_queue,
-        # remove that peer, and redistribute it, round robin style, to the rest of the peers
+        all_data_retrieved = False
+        remaining_chunks = list(range(num_chunks))
+        global_results = {"data": {}, "remaining": {}}
+
+        while not all_data_retrieved and peers:
+            ips_to_chunk_indices = self.round_robin(peers, remaining_chunks)
+            threads = []
+            result_lock = threading.Lock()
+
+            for ip, chunk_queue in ips_to_chunk_indices.items():
+                t = threading.Thread(target=self.request_chunks_wrapper, args=(ip, fhash, chunk_queue, result_lock, global_results))
+                t.start()
+                threads.append(t)
+
+            for t in threads:
+                t.join()
+
+            if not global_results["remaining"]:
+                all_data_retrieved = True
+
+            else:
+                # Reset everything for the next iteration
+                remaining_chunks = global_results["remaining"]
+                global_results["remaining"] = []
+
+                # Updates peers
+                peers = [peer for peer in peers if peer in ips_to_chunk_indices and ips_to_chunk_indices[peer]]
+                if not peers:
+                    peers = self.shared_files.get_peers_with_file(fhash)
+
+        return all_data_retrieved, global_results["data"]
+
 
     def refresh_local_files(self):
         """Refreshes local files available for sharing."""
