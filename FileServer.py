@@ -119,6 +119,7 @@ class PeerNetwork:
             print("No files are currently available for share.")
             return False
         
+        time.sleep(2)
         files = self.shared_files.get_hash_to_info()
         print(files)
         
