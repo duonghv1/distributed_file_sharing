@@ -19,6 +19,7 @@ def combine_chunks(dir_loc, filename, file_ext, chunks):
     filepath = dir_loc + filename + '.' + file_ext
     with open(filepath, "wb") as f:
         f.write(combined)
+    return filepath
 
 
 def decode_data(binary_data, file_format):

@@ -6,7 +6,7 @@ import json
 import filestore
 import fileshare
 from filechunking import combine_chunks
-
+import math
 
 class PeerNetwork:
 
@@ -64,19 +64,35 @@ class PeerNetwork:
         """Handles incoming client connections and serves files from the base directory."""
         print(f"Connection from {addr}")
         try:
-            filename = conn.recv(1024).decode('utf-8')
-            filepath = os.path.join(self.base_directory, filename)
-            if os.path.exists(filepath):
-                with open(filepath, 'rb') as f:
-                    data = f.read()
-                    conn.sendall(data)
-                print(f"Sent {filename} to {addr}")
-            else:
-                conn.sendall(b'File not found')
+            message = conn.recv(1024).decode('utf-8')
+            print("MESSAGE is", message)
+            print(self.shared_files.get_hash_to_info())
+            # algo to find the local filepath corresponding to the file hash
+            # filepath = os.path.join(self.base_directory, filename)
+            # filepath = os.path.join(self.base_directory, filename)
+            # if os.path.exists(filepath):
+            #     with open(filepath, 'rb') as f:
+            #         data = f.read()
+            #         conn.sendall(data)
+            #     print(f"Sent {filename} to {addr}")
+            # else:
+            #     conn.sendall(b'File not found')
         except Exception as e:
             print(f"Error: {e}")
         finally:
             conn.close()
+
+            # while True:
+            # data = connection.recv(1024)
+            # if not data:
+            #     break
+            # message = data.decode()
+            # command, fhash, chunk_index = message.split()
+            # if command == "GET_CHUNK":
+            #     # Here you would retrieve the requested chunk and send it back
+            #     # You might need to implement this part based on your specific application
+            #     # For simplicity, I'll just send back a confirmation message
+            #     connection.sendall(b"Chunk sent successfully")
 
     def start_server(self):
         """Starts a TCP server to serve files to peers."""
@@ -103,38 +119,65 @@ class PeerNetwork:
             print("No files are currently available for share.")
             return False
         
-        print(self.shared_files.get_hash_to_info())
+        files = self.shared_files.get_hash_to_info()
+        print(files)
         
         requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
         if requested_file.lower() == 'exit':
             return None  # Exit the loop to terminate the command prompt thread
 
-        files = self.shared_files.get_hash_to_info()
         if requested_file not in files:
             print("The file you've requested is not available. Please try again.")
             return False
 
-        success, data = self.request_file(requested_file)
-        chunks = [fdata for fidx, fdata in sorted(data.items())]
+        # success, data = self.request_file(requested_file)
 
-        if not success:
-            print("Request unsuccessful. Please try again.")
-            return False
+        # if not success:
+        #     print("Request unsuccessful. Please try again.")
+        #     return False
+        
+        # chunks = [fdata for fidx, fdata in sorted(data.items())]
 
-        file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
-        try:
-            combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
-            print("File saved successfully.")
-            return True
-        except:
-            print("Error when saving the file.")
-            return False
+        # file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        # try:
+        #     filepath = combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
+        #     print(f"File saved successfully at {filepath}.")
+        #     return True
+        # except:
+        #     print("Error when saving the file.")
+        #     return False
+        
+        print("TEST request chunk")
+        ip = input("Enter ip: ").strip()
+
+        self.request_chunk(ip, requested_file, 0)
+        
 
     def request_chunk(self, ip, fhash, chunk_index):
-        """Return the data requsted"""
+        """Send the request to the node with the ip including the hash and the chunk index.
+            Wait until get the chunk back and return the chunk.
+        
+            Note: curerntly using TCP protocol to communicate with other nodes.
+        """
         print(f"Requested chunk {chunk_index} of {fhash} from {ip}")
-        return f"Requested chunk {chunk_index} of {fhash} from {ip}"
-        pass # Merge with Linda's code
+        # Set up socket
+        data = None
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            # Connect to the server
+            s.connect((ip, self.server_port))
+            # Send request
+            request_message = f"GET_CHUNK {fhash} {chunk_index}"
+            s.sendall(request_message.encode())
+
+            # Receive response
+            response = s.recv(1024)  # Adjust buffer size as needed
+            data = response.decode()
+            print(f"Received chunk #{chunk_index} from {ip} with data: {data}")
+        
+        return data
+    
+    
+        
 
     def request_chunks(self, ip, fhash, chunk_queue):
         """
@@ -218,11 +261,12 @@ class PeerNetwork:
     def run(self):
         """Starts the peer network services."""
         threads = [
-            # threading.Thread(target=self.start_server), -- TODO: debug this, was raising an OSError
+            threading.Thread(target=self.start_server), 
             threading.Thread(target=self.broadcast_presence),
             threading.Thread(target=self.listen_for_peers),
             threading.Thread(target=self.refresh_local_files),
         ]
+
         for thread in threads:
             thread.start()
         
