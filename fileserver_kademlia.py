@@ -20,6 +20,8 @@ class PeerNetwork:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.init_kademlia(bootstrap_addr))
         loop.run_until_complete(self.share_files())
+        self.run()
+        loop.run_forever()
 
     async def init_kademlia(self, boostrap_addr):
         await self.kademlia_server.listen(self.broadcast_port)
@@ -33,7 +35,6 @@ class PeerNetwork:
     async def find_file(self, file_hash):
         file_data = await self.kademlia_server.get(file_hash)
         return file_data
-
 
     def serialize(self, data):
         """Serializes the given data to a JSON string."""
@@ -88,6 +89,3 @@ if __name__ == "__main__":
         bootstrap_ip, bootstrap_port = args.bootstrap.split(":")
         bootstrap_addr = (bootstrap_ip, int(bootstrap_port))
         peer_network = PeerNetwork(base_directory, broadcast_port=args.port, bootstrap_addr=bootstrap_addr)
-
-        peer_network.run()
-
