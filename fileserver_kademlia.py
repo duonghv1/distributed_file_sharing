@@ -52,7 +52,7 @@ class PeerNetwork:
         """Prompts user for file hash to request. Returns the file that the user requests, and the list of peers with that file."""
         requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
         if requested_file.lower() == 'exit':
-            return None  # Exit the loop to terminate the command prompt thread
+            return True  # Exit the loop to terminate the command prompt thread
         else:
             file = asyncio.run(self.find_file(requested_file))
             if file:
@@ -69,7 +69,7 @@ class PeerNetwork:
 
     def process_user_input(self):
         while True:
-            if not self.command_prompt():
+            if self.command_prompt():
                 break
 
     def run(self):
