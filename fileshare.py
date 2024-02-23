@@ -4,7 +4,7 @@ class FileShare:
         self.file_to_size = {} # hash : size
         self.file_to_ext = {} # hash : ext
         self.ip_to_files = {} # ip: [(hash, name), (hash, name)]
-        self.hash_to_info = {}
+        self.hash_to_info = {} # hash: {size: #, names: {filenames}, ips: {ips}}
 
     def __repr__(self):
         return self.refresh_data() # slow runtime

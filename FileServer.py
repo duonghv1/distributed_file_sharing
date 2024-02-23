@@ -7,14 +7,13 @@ import filestore
 import fileshare
 from filechunking import combine_chunks, get_file_chunk
 import math
+import re
 
 class PeerNetwork:
 
-    CHUNK_SIZE = 32
-
-    def __init__(self, base_directory, host='0.0.0.0', server_port=12348, broadcast_port=12346, interval=5):
+    def __init__(self, base_directory, host='0.0.0.0', server_port=12345, broadcast_port=12346, interval=5):
         self.base_directory = base_directory
-        self.__chunksize = 32
+        self.__chunksize = 100
         self.host = host
         self.server_port = server_port
         self.broadcast_port = broadcast_port
@@ -66,15 +65,15 @@ class PeerNetwork:
         print(f"Connection from {addr}")
         try:
             message_parts = conn.recv(1024).decode('utf-8').split()
-            print("MESSAGE is", message_parts)
             if message_parts[0] == "GET_CHUNK":
                 fhash = message_parts[1]
                 chunk_index = int(message_parts[2])
                 fileobj = self.file_store.find_file_by_hash(fhash)
                 chunk = get_file_chunk(fileobj.filepath, self.__chunksize, chunk_index)
-                print("CHUNK is", chunk)
-                message = f"CHUNK RECEIVED {fhash} {chunk_index} {chunk}"
-                conn.sendall(message.encode())
+                # Prepare the header: hash (64 bytes), chunk index (4 bytes), chunk_len (4 bytes)
+                header = fhash.encode() + chunk_index.to_bytes(4, byteorder='big')  + len(chunk).to_bytes(4, byteorder='big')
+                # Send the header followed by the data
+                conn.sendall(header + chunk)
         except Exception as e:
             print(f"Error: {e}")
         finally:
@@ -117,28 +116,22 @@ class PeerNetwork:
             print("The file you've requested is not available. Please try again.")
             return False
 
-        # success, data = self.request_file(requested_file)
+        success, data = self.request_file(requested_file)
 
-        # if not success:
-        #     print("Request unsuccessful. Please try again.")
-        #     return False
+        if not success:
+            print("Request unsuccessful. Please try again.")
+            return False
         
-        # chunks = [fdata for fidx, fdata in sorted(data.items())]
+        chunks = [fdata for fidx, fdata in sorted(data.items())]
 
-        # file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
-        # try:
-        #     filepath = combine_chunks(base_directory, file_name, files[requested_file]['ext'], chunks)
-        #     print(f"File saved successfully at {filepath}.")
-        #     return True
-        # except:
-        #     print("Error when saving the file.")
-        #     return False
-        
-        print("TEST request chunk")
-        ip = input("Enter ip: ").strip()
-
-        self.request_chunk(ip, requested_file, 0)
-        
+        file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        try:
+            filepath = combine_chunks(self.base_directory, file_name, files[requested_file]['ext'], chunks)
+            print(f"File saved successfully at {filepath}.")
+            return True
+        except:
+            print("Error when saving the file.")
+            return False
 
     def request_chunk(self, ip, fhash, chunk_index):
         """Send the request to the node with the ip including the hash and the chunk index.
@@ -156,12 +149,25 @@ class PeerNetwork:
             request_message = f"GET_CHUNK {fhash} {chunk_index}"
             s.sendall(request_message.encode())
 
-            # Receive response
-            response = s.recv(1024)  # Adjust buffer size as needed
-            data = response.decode()
-            print(f"Received message: {data}")
-        
+            # Receive response (Assume the only type of response we receive is chunk data)
+            fhash_rcv, chunk_index_rcv, data = self.receive_with_header(s)
+            print(f"RECEIVED: {fhash}, {chunk_index}, {data}")
+            if fhash_rcv != fhash or chunk_index_rcv != chunk_index:
+                raise Exception(f"Hash index mismatch: Expected ({fhash}, {chunk_index}), but received ({fhash_rcv}, {chunk_index_rcv})")
+            
         return data
+
+
+    def receive_with_header(self, client_socket):
+        # Read the header: hash (64 bytes), chunk index (4 bytes), chunk_len (4 bytes)
+        header = client_socket.recv(64 + 4 + 4)
+        fhash = header[:64].decode()
+        chunk_index = int.from_bytes(header[64:68], byteorder='big')
+        data_length = int.from_bytes(header[68:], byteorder='big')
+        
+        # Read the data based on the length from the header
+        data = client_socket.recv(data_length)
+        return fhash, chunk_index, data
     
         
     def request_chunks(self, ip, fhash, chunk_queue):
@@ -190,22 +196,25 @@ class PeerNetwork:
             ips_to_chunk_indices[idx_to_ip[pidx]].append(cidx)
 
         return ips_to_chunk_indices
+    
 
     def request_chunks_wrapper(self, ip, fhash, chunk_queue, result_lock, global_results):
         data, remaining_queue = self.request_chunks(ip, fhash, chunk_queue)
         with result_lock:
             global_results["data"].update(data)
             global_results["remaining"].extend(remaining_queue)
+            print(global_results)
 
     def request_file(self, fhash):
         """return true if file request succeeded, else returns false"""
         peers = self.shared_files.get_peers_with_file(fhash)
         size = self.shared_files.get_size_of_file(fhash)
-        num_chunks = math.ceil(size/CHUNK_SIZE)
+        num_chunks = math.ceil(size/self.__chunksize)
 
         all_data_retrieved = False
         remaining_chunks = list(range(num_chunks))
-        global_results = {"data": {}, "remaining": {}}
+        global_results = {"data": {}, "remaining": []}
+        ips_to_chunk_indices = self.round_robin(peers, remaining_chunks)
 
         while not all_data_retrieved and peers:
             ips_to_chunk_indices = self.round_robin(peers, remaining_chunks)
@@ -213,6 +222,7 @@ class PeerNetwork:
             result_lock = threading.Lock()
 
             for ip, chunk_queue in ips_to_chunk_indices.items():
+                print(f"{ip}: {chunk_queue}")
                 t = threading.Thread(target=self.request_chunks_wrapper, args=(ip, fhash, chunk_queue, result_lock, global_results))
                 t.start()
                 threads.append(t)
