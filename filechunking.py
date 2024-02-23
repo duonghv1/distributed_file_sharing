@@ -1,5 +1,4 @@
 import os
-import math
 
 def get_file_chunk(filepath, chunk_size, chunk_ind):
     # return the requested chunk based on chunk index of the specified file path in bytes
