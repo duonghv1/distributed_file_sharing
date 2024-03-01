@@ -8,6 +8,7 @@ import fileshare
 from filechunking import combine_chunks, get_file_chunk
 import math
 import re
+import argparse
 
 class PeerNetwork:
 
@@ -116,18 +117,26 @@ class PeerNetwork:
             print("The file you've requested is not available. Please try again.")
             return False
 
+        start_request = time.time()
+
         success, data = self.request_file(requested_file)
 
         if not success:
             print("Request unsuccessful. Please try again.")
             return False
+
+        print(f"Time for request: {time.time() - start_request}")
         
         chunks = [fdata for fidx, fdata in sorted(data.items())]
 
-        file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        #file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        file_name = "output" ### CHANGE IF YOU WANT TO COLLECT INPUT
         try:
+            start_combine_chunks = time.time()
             filepath = combine_chunks(self.base_directory, file_name, files[requested_file]['ext'], chunks)
             print(f"File saved successfully at {filepath}.")
+
+            print(f"Time to combine chunks: {time.time() - start_combine_chunks}")
             return True
         except:
             print("Error when saving the file.")
@@ -279,6 +288,15 @@ class PeerNetwork:
 
 
 if __name__ == "__main__":
-    base_directory = './files/'  # Adjust as per your directory structure
-    peer_network = PeerNetwork(base_directory)
+    parser = argparse.ArgumentParser(description='Run a file server.')
+    parser.add_argument('--base_dir', type=str, required=True,
+                        help='The base directory from which to serve files.')
+    parser.add_argument('--port', type=int, required=True,
+                        help='The port on which the server will run.')
+    args = parser.parse_args()
+    base_directory = args.base_dir
+    server_port = args.port
+
+    # base_directory = './files/'  # Adjust as per your directory structure
+    peer_network = PeerNetwork(base_directory, server_port=server_port)
     peer_network.run()
