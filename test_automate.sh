@@ -10,6 +10,8 @@ exec 2>&1
 # Prompt user for the number of nodes
 read -p "Enter the number of nodes you want to start: " NUM_NODES
 
+read -p "Enter your python command (ex: python3, py, python): " PYTHON
+
 # Check if the input is valid
 if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]]; then
     echo "Error: Please enter a valid number."
@@ -24,6 +26,6 @@ BASE_DIR="./files"
 for ((i=0; i<=$NUM_NODES; i++)); do
     PORT=$((SERVER_BASE_PORT + i))
     DIR="$BASE_DIR_$PORT"
-    python3 FileServer.py --port="$PORT" --base_dir="$DIR" &
+    $PYTHON FileServer.py --port="$PORT" --base_dir="$DIR" &
 done
 
