@@ -77,20 +77,21 @@ class FileStore:
     def load_files(self):
         """Load files from local directory. Returns true if new files are found."""
         found_new_files = False
-        files = []
+        files = set()
         for f in os.listdir(self.base_directory):
             file_path = os.path.join(self.base_directory, f)
             if os.path.isfile(file_path) and not f.startswith('.') and not f.endswith('.download'):
                 file = File(file_path=file_path, chunk_size=self.chunk_size)
                 file_hash = file.hash()
-                files.append(file_hash)
+                files.add(file_hash)
                 if file_hash not in self.files:
                     self.files[file_hash] = file
                     for chunk_hash in file.chunks:
                         self.file_chunks[chunk_hash] = file_hash
                     found_new_files = True
         # Remove files that are no longer present
-        for file_hash in files:
-            if file_hash not in self.files:
+        previous_files = set(self.files.keys())
+        for file_hash in previous_files:
+            if file_hash not in files:
                 del self.files[file_hash]
         return found_new_files

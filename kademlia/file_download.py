@@ -33,7 +33,6 @@ class FileDownloader:
                     else:
                         raise Exception
             except Exception as e:
-                await aprint("Failed to download piece from {peer}")
                 failed_peers.add(peer)
         return None, failed_peers
 

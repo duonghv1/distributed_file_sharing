@@ -10,6 +10,7 @@ from utils import serialize, deserialize, get_internal_ip
 
 
 PUBLIC_IP_GETTER = "https://checkip.amazonaws.com"
+MAX_PEERS = 30
 
 class UserExit(Exception):
     pass
@@ -30,12 +31,20 @@ class PeerNetwork:
         await self.kademlia_server.bootstrap([boostrap_addr])
 
     async def share_files(self):
+        file_index = await self.find_hash("index:0")
+        if not file_index:
+            file_index = {}
+        else:
+            file_index = deserialize(file_index)
         for file_hash, file in self.file_store.files.items():
+            if file_hash not in file_index:
+                file_index[file_hash] = file.file_name
             await self.kademlia_server.set(file_hash, file.metadata(serialized=True))
             share_chunk_coroutines = []
             for chunk in file.chunks.values():
                 share_chunk_coroutines.append(self.share_chunk(chunk.chunk_hash))
             await asyncio.gather(*share_chunk_coroutines)
+        await self.kademlia_server.set("index:0", serialize(file_index))
 
     async def share_chunk(self, chunk_hash):
         chunk_data = await self.kademlia_server.get(chunk_hash)
@@ -48,7 +57,7 @@ class PeerNetwork:
             chunk = {"peers": [f"{self.ip}:{self.file_server.port}"]}
         await self.kademlia_server.set(chunk_hash, serialize(chunk))
 
-    async def find_file(self, file_hash):
+    async def find_hash(self, file_hash):
         return await self.kademlia_server.get(file_hash)
 
     async def refresh_local_files(self):
@@ -59,10 +68,13 @@ class PeerNetwork:
             await asyncio.sleep(self.interval)
 
     async def download_file(self, file_hash):
+        if not file_hash.startswith('file:'):
+            await aioconsole.aprint("Invalid file hash.")
+            return
         if self.file_store.files.get(file_hash):
             await aioconsole.aprint("File already exists locally.")
             return
-        file = await self.find_file(file_hash)
+        file = await self.find_hash(file_hash)
         if file:
             chunks = []
             file_metadata = deserialize(file)
@@ -72,7 +84,10 @@ class PeerNetwork:
                 chunk_data = await self.kademlia_server.get(chunk_hash)
                 if chunk_data:
                     chunk_metadata = deserialize(chunk_data)
-                    chunk_peers = chunk_metadata['peers']
+                    chunk_peers = chunk_metadata['peers'][0:MAX_PEERS]
+                    if len(chunk_peers) == 0:
+                        await aioconsole.aprint(f"No peers found for chunk {chunk_hash}. Aborting download...")
+                        return
                     chunk['peers'] = chunk_peers
                     chunks.append(chunk)
             downloader = file_download.FileDownloader(self.base_directory, file_metadata, chunks)
@@ -90,13 +105,19 @@ class PeerNetwork:
     async def display_help(self):
         commands = {
             "ls": "display local files being shared",
+            "ls remote": "display remote files being shared",
             "f <hash>": "lookup file or chunk in the network",
             "dl <file_hash>": "download file to directory",
             "exit": "exit the program"
         }
-        await aioconsole.aprint("Commands:\n")
+        await aioconsole.aprint("Commands:")
         for command, description in commands.items():
-            await aioconsole.aprint(f"{command:16} {description}")
+            await aioconsole.aprint(f"  {command:16} {description}")
+
+    async def display_remote_files(self, data):
+        await aioconsole.aprint("Remote files:")
+        for file_hash, file_name in sorted(data.items(), key=lambda x: x[1]):
+            await aioconsole.aprint(f"  {file_name:16} {file_hash}")
 
     async def process_user_input(self):
 
@@ -112,17 +133,24 @@ class PeerNetwork:
                 requested_file = command.split(" ")[1]
                 await self.download_file(requested_file)
             elif command.startswith("find ") or command.startswith("f "):
-                requested_file = command.split(" ")[1]
-                file = await self.find_file(requested_file)
-                if file:
-                    file_metadata = deserialize(file)
-                    await aioconsole.aprint(f"Discovered file: {file_metadata}")
+                requested_hash = command.split(" ")[1]
+                result = await self.find_hash(requested_hash)
+                if result:
+                    data = deserialize(result)
+                    if requested_hash.startswith('file:'):
+                        await aioconsole.aprint(f"Discovered file: {data}")
+                    elif requested_hash.startswith('chunk:'):
+                        await aioconsole.aprint(f"Discovered chunk: {data}")
+                    elif requested_hash == 'index:0':
+                        await self.display_remote_files(data)
                 else:
-                    await aioconsole.aprint("File not found")
-            elif command.startswith("ls"):
+                    await aioconsole.aprint("Hash not found")
+            elif command == "ls":
                 await aioconsole.aprint("Local files:")
                 for file in self.file_store.files.values():
                     await aioconsole.aprint(f"  {file}")
+            elif command == "ls remote":
+                await self.display_remote_files(deserialize(await self.find_hash("index:0")))
             else:
                 await aioconsole.aprint("Command not found. Type 'help' for a list of commands.")
             await aioconsole.aprint("")
