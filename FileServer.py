@@ -11,7 +11,7 @@ import re
 
 class PeerNetwork:
 
-    def __init__(self, base_directory, host='0.0.0.0', server_port=12345, broadcast_port=12346, interval=5):
+    def __init__(self, base_directory, host='0.0.0.0', server_port=12346, broadcast_port=12346, interval=5):
         self.base_directory = base_directory
         self.__chunksize = 100
         self.host = host
@@ -52,13 +52,14 @@ class PeerNetwork:
             s.bind(('', self.broadcast_port))
             print(f"Listening for peers on broadcast port {self.broadcast_port}")
             while not self.stop_threads:
-                data, addr = s.recvfrom(1024)
+                data, addr = s.recvfrom(2000)
                 message = self.deserialize(data)
                 if message['type'] == "DISCOVER":
                     server_port = message['server_port']
                     print(f"Discovered peer at {addr[0]}:{server_port}")
                 elif message['type'] == "FILES":
                     self.shared_files.receive_data(addr[0], message['files'])
+                    # print("FROM MSG", self.shared_files.file_to_size)
 
     def handle_client(self, conn, addr):
         """Handles incoming client connections and serves files from the base directory."""
@@ -100,11 +101,10 @@ class PeerNetwork:
 
     def command_prompt(self):
         """Prompts user for file hash to request. If request successful, writes the data into the user's folder and returns True."""
+
         if self.shared_files.is_empty():
-            print("No files are currently available for share.")
             return False
         
-        time.sleep(2)
         files = self.shared_files.get_hash_to_info()
         print(files)
         

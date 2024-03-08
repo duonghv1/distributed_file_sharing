@@ -15,7 +15,7 @@ def combine_chunks(dir_loc, filename, file_ext, chunks):
      For now, assume chunks in bytes are sorted
      """
     combined = b''.join(chunks)
-    filepath = dir_loc + filename + '.' + file_ext
+    filepath = dir_loc + filename + file_ext
     with open(filepath, "wb") as f:
         f.write(combined)
     return filepath
