@@ -10,7 +10,7 @@ class FileServer:
         self.port = port
         self.server = aiohttp.web.Application()
         self.create_routes()
-        self.rnner = None
+        self.runner = None
 
     def create_routes(self):
         self.server.router.add_get('', self.handle_root_request)
