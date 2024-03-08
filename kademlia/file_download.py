@@ -11,7 +11,7 @@ class FileDownloader:
         self.base_directory = base_directory
         self.file_data = file_data
         self.chunks = chunks
-        self.file_path = self.base_directory + self.file_data['file_name']
+        self.file_path = self.base_directory + '/' + self.file_data['file_name']
         self.temp_file_path = self.file_path + '.download'
         self.init_file()
 
@@ -23,7 +23,6 @@ class FileDownloader:
     async def download_piece(self, session, chunk, start, end, peers):
         failed_peers = set()
         while not peers.empty():
-            await aprint(peers.qsize())
             peer = await peers.get()
             url = f"http://{peer}/chunks/{chunk.chunk_hash}"
             headers = {"Range": f"bytes={start}-{end}"}

@@ -93,7 +93,6 @@ class PeerNetwork:
             downloader = file_download.FileDownloader(self.base_directory, file_metadata, chunks)
             failed_peers = await downloader.download_file()
             # Remove failed peers from chunk metadata
-            print(failed_peers)
             for chunk_hash, peers in failed_peers:
                 chunk_data = await self.kademlia_server.get(chunk_hash)
                 if chunk_data:
