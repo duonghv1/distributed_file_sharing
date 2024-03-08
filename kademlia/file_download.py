@@ -22,7 +22,8 @@ class FileDownloader:
 
     async def download_piece(self, session, chunk, start, end, peers):
         failed_peers = set()
-        while peers:
+        while not peers.empty():
+            await aprint(peers.qsize())
             peer = await peers.get()
             url = f"http://{peer}/chunks/{chunk.chunk_hash}"
             headers = {"Range": f"bytes={start}-{end}"}
@@ -53,8 +54,8 @@ class FileDownloader:
         chunk_data = b''.join([piece for piece, _ in result if piece is not None])
         for piece, _ in result:
             if piece is None:
-                aprint(f"Failed to download chunk {chunk.chunk_hash}")
-                return all_failed_peers
+                await aprint(f"Failed to download chunk {chunk.chunk_hash}")
+                return chunk.chunk_hash, all_failed_peers
         await self.write_chunk_to_file(chunk, chunk_data)
         return chunk.chunk_hash, all_failed_peers
 
@@ -79,7 +80,7 @@ class FileDownloader:
                     os.rename(self.temp_file_path, self.file_path)
                     await aprint(f"Downloaded file: {self.file_data['file_name']}")
                 else:
-                    raise Exception("File hash mismatch")
+                    raise Exception("File hash mismatch. Missing chunks.")
         except Exception as e:
             await aprint(f"Failed to download file: {self.file_data['file_name']}")
             await aprint(f"Error: {e}")
