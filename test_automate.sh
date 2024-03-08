@@ -7,7 +7,7 @@ exec 2>&1
 LOG_FILE="output.log"
 SERVER_BASE_PORT=12345
 BASE_DIR="./files"
-NEW_FILE="test.pdf"
+TEST_FILE="test.pdf"
 
 
 
@@ -22,22 +22,20 @@ if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]]; then
 fi
 
 
-TEST_FILE="https://www.fusd1.org/cms/lib/AZ01001113/Centricity/Domain/1385/harry%20potter%20chapter%201.pdf"
+TEST_FILE_LINK="https://www.fusd1.org/cms/lib/AZ01001113/Centricity/Domain/1385/harry%20potter%20chapter%201.pdf"
 
 # Download the file
 echo "Downloading test file ..."
-wget -O "$NEW_FILE" "$TEST_FILE"
+wget -O "$TEST_FILE" "$TEST_FILE_LINK"
 
 # Check if download was successful
 if [ $? -eq 0 ]; then
     echo "Download successful."
     run_file_server "$NUM_NODES" "$SERVER_BASE_PORT" "$BASE_DIR" "$PYTHON"
 
-    
-
     # Delete the downloaded file
     echo "Deleting file..."
-    rm "$NEW_FILE"
+    rm "$TEST_FILE"
 else
     echo "Download failed."
 fi
@@ -56,17 +54,20 @@ run_file_server() {
 
         # Check if directory exists
         if [ -d "$DIR" ]; then
-            # If directory exists, delete it
-            echo "Deleting existing directory: $DIR"
-            rm -rf "$DIR"
+            # If directory exists, delete its content
+            echo "Deleting all existing content in directory: $DIR"
+            rm -rf "${DIR}/"*
+        else
+            # Create the directory
+            mkdir -p "$DIR"
         fi
 
-        # Create the directory
-        mkdir -p "$DIR"
-        
+        # Copy the file into the directory
+        cp "$TEST_FILE" "$DIR/$TEST_FILE"
 
         # Execute Python script with provided arguments
         "$PYTHON" FileServer.py --port="$PORT" --base_dir="$DIR" &
+
     done
 }
 
