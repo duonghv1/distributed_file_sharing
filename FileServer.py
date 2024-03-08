@@ -105,6 +105,7 @@ class PeerNetwork:
         if self.shared_files.is_empty():
             return False
         
+        time.sleep(2)
         files = self.shared_files.get_hash_to_info()
         print(files)
         
