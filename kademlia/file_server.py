@@ -1,14 +1,6 @@
 import aiohttp.web
 import aioconsole
-import os
-from pyngrok import conf, ngrok
-
-
-from dotenv import load_dotenv
-
 from file_store import FileStore, File
-
-load_dotenv()
 
 
 class FileServer:
