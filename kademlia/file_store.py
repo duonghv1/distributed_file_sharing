@@ -26,7 +26,10 @@ class File:
         self.file_path = file_path
         self.file_name = file_name if file_name else os.path.basename(file_path)
         self.file_size = os.path.getsize(file_path)
-        self.chunk_size = chunk_size
+        if self.file_size // chunk_size > 50:
+            self.chunk_size = self.file_size // 50
+        else:
+            self.chunk_size = chunk_size
         self.chunks = self._chunk_file()
 
     def metadata(self, serialized=False):
