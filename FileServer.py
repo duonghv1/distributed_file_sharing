@@ -54,12 +54,13 @@ class PeerNetwork:
         """Listens for broadcast messages from other peers to discover them."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            recv_buffer_size = s.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF) # Get the system's default receive buffer size for the socket
             s.bind(('', self.broadcast_port))
             s.setblocking(False)  # Set the socket to non-blocking mode
             self.debug_print(f"Listening for peers on broadcast port {self.broadcast_port}")
             while not stop_event.is_set():
                 try:
-                    data, addr = s.recvfrom(2000)
+                    data, addr = s.recvfrom(recv_buffer_size)
                     if data:
                         message = self.deserialize(data)
                         if message['type'] == "DISCOVER":
@@ -69,6 +70,7 @@ class PeerNetwork:
                             self.shared_files.receive_data(addr[0], message['files'])
                 except BlockingIOError:
                     pass
+
 
 
     def handle_client(self, conn, addr):
@@ -156,7 +158,7 @@ class PeerNetwork:
             except:
                 print("Error when saving the file.")
                 return False
-        except KeyboardInterrupt:
+        except Exception as e:
             return None
 
 
