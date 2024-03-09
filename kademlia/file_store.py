@@ -3,6 +3,7 @@ import os
 from utils import serialize
 
 DEFAULT_CHUNK_SIZE = 8192
+MAX_CHUNKS = 30
 
 
 class Chunk:
@@ -26,8 +27,8 @@ class File:
         self.file_path = file_path
         self.file_name = file_name if file_name else os.path.basename(file_path)
         self.file_size = os.path.getsize(file_path)
-        if self.file_size // chunk_size > 50:
-            self.chunk_size = self.file_size // 50
+        if self.file_size // chunk_size > MAX_CHUNKS:
+            self.chunk_size = self.file_size // MAX_CHUNKS
         else:
             self.chunk_size = chunk_size
         self.chunks = self._chunk_file()

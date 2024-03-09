@@ -1,5 +1,4 @@
 import asyncio
-import requests
 import argparse
 import aioconsole
 import file_store
@@ -39,7 +38,8 @@ class PeerNetwork:
         for file_hash, file in self.file_store.files.items():
             if file_hash not in file_index:
                 file_index[file_hash] = file.file_name
-            await self.kademlia_server.set(file_hash, file.metadata(serialized=True))
+            if not self.find_hash(file_hash):
+                await self.kademlia_server.set(file_hash, file.metadata(serialized=True))
             share_chunk_coroutines = []
             for chunk in file.chunks.values():
                 share_chunk_coroutines.append(self.share_chunk(chunk.chunk_hash))
@@ -64,6 +64,7 @@ class PeerNetwork:
         """Refreshes local files available for sharing."""
         while True:
             if self.file_store.load_files():
+                await self.file_server.update_file_store(self.file_store)
                 await self.share_files()
             await asyncio.sleep(self.interval)
 
@@ -84,23 +85,25 @@ class PeerNetwork:
                 chunk_data = await self.kademlia_server.get(chunk_hash)
                 if chunk_data:
                     chunk_metadata = deserialize(chunk_data)
-                    chunk_peers = chunk_metadata['peers'][0:MAX_PEERS]
+                    chunk_peers = [x for x in chunk_metadata['peers'][0:MAX_PEERS] if x != f"{self.ip}:{self.file_server.port}"]
                     if len(chunk_peers) == 0:
                         await aioconsole.aprint(f"No peers found for chunk {chunk_hash}. Aborting download...")
                         return
                     chunk['peers'] = chunk_peers
                     chunks.append(chunk)
             downloader = file_download.FileDownloader(self.base_directory, file_metadata, chunks)
-            failed_peers = await downloader.download_file()
+            status, failed_peers = await downloader.download_file()
             # Remove failed peers from chunk metadata
-            for chunk_hash, peers in failed_peers:
-                chunk_data = await self.kademlia_server.get(chunk_hash)
-                if chunk_data:
-                    chunk_metadata = deserialize(chunk_data)
-                    chunk_peers = chunk_metadata['peers']
-                    chunk_peers = list(set(chunk_peers) - set(peers))
-                    chunk_metadata['peers'] = chunk_peers
-                    await self.kademlia_server.set(chunk_hash, serialize(chunk_metadata))
+            # for chunk_hash, peers in failed_peers:
+            #     chunk_data = await self.kademlia_server.get(chunk_hash)
+            #     if chunk_data:
+            #         chunk_metadata = deserialize(chunk_data)
+            #         chunk_peers = chunk_metadata['peers']
+            #         chunk_peers = list(set(chunk_peers) - set(peers))
+            #         chunk_metadata['peers'] = chunk_peers
+            #         await self.kademlia_server.set(chunk_hash, serialize(chunk_metadata))
+            # return status
+        return False
 
     async def display_help(self):
         commands = {
