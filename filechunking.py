@@ -29,16 +29,6 @@ def decode_data(binary_data, file_format):
     else:
         return None
 
-# filepath = r"C:\Users\thuyd\OneDrive\Desktop\school\cs230\distributed_file_sharing\files\lab5_diagram.pdf"
-# test_dir = r"C:\Users\thuyd\OneDrive\Desktop\school\cs230\distributed_file_sharing\files"
-# bin_data = []
-# chunk_size = 10000
-# number_chunks = math.ceil( os.path.getsize(filepath) / chunk_size )
-
-# for i in range(number_chunks):
-#     bin_data.append(file_chunking(filepath, chunk_size, i))
-
-# final_bin = combine_chunks(test_dir, "output", "pdf", bin_data)
 
 
         
