@@ -7,11 +7,12 @@ import fileshare
 from filechunking import combine_chunks, get_file_chunk
 import math
 import sys
+import signal
 
 
 class PeerNetwork:
 
-    def __init__(self, base_directory, debug_mode=False, host='0.0.0.0', server_port=12345, broadcast_port=12346, interval=5):
+    def __init__(self, base_directory, mode="normal", host='0.0.0.0', server_port=12345, broadcast_port=12346, interval=5):
         self.base_directory = base_directory
         self.chunk_size = 100
         self.host = host
@@ -20,19 +21,20 @@ class PeerNetwork:
         self.interval = interval
         self.file_store = filestore.FileStore(base_directory)  # handle local directory  
         self.shared_files = fileshare.FileShare()              # IP Address: List of Files; each file is a tuple (file_name, hash)
-        self.debug_mode = debug_mode
+        self.mode = mode
+        self.stop_event = threading.Event()
 
     def debug_print(self, message):
         """Helper function to print debug messages if debug mode is enabled."""
-        if self.debug_mode:
+        if self.mode == "debug":
             print(message)
 
 
-    def broadcast_presence(self, stop_event):
+    def broadcast_presence(self):
         """Broadcasts this server's presence to the network every 'interval' seconds."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            while not stop_event.is_set():
+            while not self.stop_event.is_set():
                 s.sendto(self.serialize(
                     {
                         'type': 'DISCOVER',
@@ -48,17 +50,18 @@ class PeerNetwork:
                 ), ('<broadcast>', self.broadcast_port))
                 self.debug_print(f"Broadcasted presence on port {self.broadcast_port}")
                 time.sleep(self.interval)
+            self.debug_print("close broadcast presence")
 
 
-    def listen_for_peers(self, stop_event):
+    def listen_for_peers(self):
         """Listens for broadcast messages from other peers to discover them."""
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             recv_buffer_size = s.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF) # Get the system's default receive buffer size for the socket
             s.bind(('', self.broadcast_port))
-            s.setblocking(False)  # Set the socket to non-blocking mode
+            s.setblocking(False)  # Set socket to non-blocking mode
             self.debug_print(f"Listening for peers on broadcast port {self.broadcast_port}")
-            while not stop_event.is_set():
+            while not self.stop_event.is_set():
                 try:
                     data, addr = s.recvfrom(recv_buffer_size)
                     if data:
@@ -70,6 +73,7 @@ class PeerNetwork:
                             self.shared_files.receive_data(addr[0], message['files'])
                 except BlockingIOError:
                     pass
+            self.debug_print("close listen for peers")
 
 
 
@@ -92,22 +96,23 @@ class PeerNetwork:
             conn.close()
 
 
-    def start_server(self, stop_event):
+    def start_server(self):
         """Starts a TCP server to serve files to peers."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((self.host, self.server_port))
             s.listen()
-            s.setblocking(False)  # Set the socket to non-blocking mode
+            s.settimeout(5)  # Timeout of 5 seconds so socket doesn't block forever
             self.debug_print(f"Listening on {self.host}:{self.server_port}")
-            while not stop_event.is_set():
+            while not self.stop_event.is_set():
                 try:
                     conn, addr = s.accept()
                     if conn:
                         client_thread = threading.Thread(target=self.handle_client, args=(conn, addr))
                         client_thread.start()
-                except BlockingIOError:
+                except TimeoutError:
                     pass
-                
+            self.debug_print("close start server")
+
 
     def serialize(self, data):
         """Serializes the given data to a JSON string."""
@@ -118,48 +123,45 @@ class PeerNetwork:
         return json.loads(data.decode('utf-8'))
 
     def command_prompt(self):
-        try:
-            """Prompts user for file hash to request. If request successful, writes the data into the user's folder and returns True."""
-
-            # requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
-            # if requested_file.lower() == 'exit':
-            #     return None  # Exit the loop to terminate the command prompt thread
-
-            # if self.shared_files.is_empty():
-            #     return False
-            
-            time.sleep(2)
-            if not(self.shared_files.is_empty()):
-                files = self.shared_files.get_hash_to_info()
-                print(files)
-            
-            
+        """Prompts user for file hash to request. If request successful, writes the data into the user's folder and returns True."""
+        if self.shared_files.is_empty():
+            return False
+    
+        time.sleep(2)
+        files = self.shared_files.get_hash_to_info()
+        print(files)
+        
+        if self.mode == "test":
+            requested_file = "b9eb5104658f4d6ef8ff9b457f28f188b6aa1b201443719c501e462072eacf57"
+        else:
             requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
-            if requested_file.lower() == 'exit':
-                return None  # Exit the loop to terminate the command prompt thread
-
-            if requested_file not in files:
-                print("The file you've requested is not available. Please try again.")
-                return False
-
-            success, data = self.request_file(requested_file)
-
-            if not success:
-                print("Request unsuccessful. Please try again.")
-                return False
-            
-            chunks = [fdata for fidx, fdata in sorted(data.items())]
-
-            file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
-            try:
-                filepath = combine_chunks(self.base_directory, file_name, files[requested_file]['ext'], chunks)
-                print(f"File saved successfully at {filepath}.")
-                return True
-            except:
-                print("Error when saving the file.")
-                return False
-        except Exception as e:
+        
+        if requested_file.lower() == 'exit':
             return None
+            
+        if requested_file not in files:
+            print("The file you've requested is not available. Please try again.")
+            return False
+
+        success, data = self.request_file(requested_file)
+
+        if not success:
+            print("Request unsuccessful. Please try again.")
+            return False
+        
+        chunks = [fdata for fidx, fdata in sorted(data.items())]
+        if self.mode == "test":
+            file_name = "test_output"
+        else:
+            file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+        try:
+            filepath = combine_chunks(self.base_directory, file_name, files[requested_file]['ext'], chunks)
+            print(f"File saved successfully at {filepath}.")
+            return True
+        except:
+            print("Error when saving the file.")
+            return False
+                
 
 
     def request_chunk(self, ip, fhash, chunk_index):
@@ -270,42 +272,56 @@ class PeerNetwork:
         return all_data_retrieved, global_results["data"]
 
 
-    def refresh_local_files(self, stop_event):
+    def refresh_local_files(self):
         """Refreshes local files available for sharing."""
-        while not stop_event.is_set():
+        while not self.stop_event.is_set():
             self.file_store.load_files()
             time.sleep(self.interval)
+        self.debug_print("close refresh local files")
 
 
     def run(self):
         """Starts the peer network services."""
-        
-        stop_event = threading.Event() # Create a shared event to signal the threads to stop
-
         threads = [
-            threading.Thread(target=self.start_server, args=(stop_event,)), 
-            threading.Thread(target=self.broadcast_presence, args=(stop_event,)),
-            threading.Thread(target=self.listen_for_peers, args=(stop_event,)),
-            threading.Thread(target=self.refresh_local_files, args=(stop_event,)),
+            threading.Thread(target=self.start_server), 
+            threading.Thread(target=self.broadcast_presence),
+            threading.Thread(target=self.listen_for_peers),
+            threading.Thread(target=self.refresh_local_files),
         ]
 
-        
-        for thread in threads:   #start the threads
+        signal.signal(signal.SIGINT, self.signal_handler) # Register signal handler for Ctrl+C
+
+        for thread in threads: 
             thread.start()
         
         while True:
-            if self.command_prompt() == None:
-                stop_event.set() # Set the stop event to signal the threads to stop
-                for thread in threads:
-                    thread.join()
-                return
+            result = self.command_prompt()
+            if  result == None:
+                break
+            elif result == True and self.mode == "test":
+                break
+            
 
+        self.stop_event.set()
+        for thread in threads:
+            thread.join()
+        return
+    
+
+    def signal_handler(self, sig, frame): 
+        print("Ctrl+C detected, closing program")       
+        self.stop_event.set()
+        sys.exit(0)
+            
 
 
 if __name__ == "__main__":
     base_directory = './files/'  # Adjust as per your directory structure
-    debug_mode = False  # Default debug mode is off
-    if len(sys.argv) > 1 and sys.argv[1] == 'debug':  # Check if debug mode is enabled via command line argument
-        debug_mode = True
-    peer_network = PeerNetwork(base_directory, debug_mode)
+    mode = "test" 
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'debug': 
+            mode = "debug"
+        elif sys.argv[1] == 'test': 
+            mode = "test"
+    peer_network = PeerNetwork(base_directory, mode)
     peer_network.run()
