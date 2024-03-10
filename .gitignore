@@ -3,3 +3,5 @@ files/*
 .idea/*
 __pycache__/
 output.log
+.env
+kademlia/*
