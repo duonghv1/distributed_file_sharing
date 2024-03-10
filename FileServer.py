@@ -9,6 +9,7 @@ import math
 import sys
 import signal
 import argparse
+from nonblocking_io import nb_read_input
 
 class PeerNetwork:
 
@@ -134,7 +135,7 @@ class PeerNetwork:
         if self.mode == "test":
             requested_file = "b9eb5104658f4d6ef8ff9b457f28f188b6aa1b201443719c501e462072eacf57"
         else:
-            requested_file = input("Enter the file hash to request (or type 'exit' to quit): ").strip()
+            requested_file = nb_read_input("Enter the file hash to request (or type 'exit' to quit): ").strip()
         
         if requested_file.lower() == 'exit':
             return None
@@ -157,7 +158,7 @@ class PeerNetwork:
         if self.mode == "test":
             file_name = "harry potter chapter 1"
         else:
-            file_name = input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
+            file_name = nb_read_input("Request successful! What would you like to name your file? (Do not include the extension): ").strip()
         try:
             start_combine_chunks = time.time()
             filepath = combine_chunks(self.base_directory, file_name, files[requested_file]['ext'], chunks)
@@ -330,6 +331,8 @@ if __name__ == "__main__":
                         help='The base directory from which to serve files.')
     args = parser.parse_args()
     base_directory = args.base_dir
+    if base_directory[-1] != '/':
+        base_directory += '/'
     mode = args.mode
     peer_network = PeerNetwork(base_directory, mode)
     peer_network.run()
