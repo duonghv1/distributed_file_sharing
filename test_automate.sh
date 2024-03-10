@@ -1,11 +1,14 @@
 #!/bin/bash
 
+# python FileServer.py --mode="test" --base_dir="./files/12345/"  (requester program has to be 'test')
+# python FileServer.py --base_dir="./files/12347/" 
+
 # Redirect stdout and stderr to the log file
 exec > >(tee -a ${LOG_FILE} )
 exec 2>&1
 
 LOG_FILE="output.log"
-SERVER_BASE_PORT=12345
+SERVER_BASE_PORT=1
 BASE_DIR="./files"
 TEST_FILE="test.pdf"
 TEST_FILE_LINK="https://www.fusd1.org/cms/lib/AZ01001113/Centricity/Domain/1385/harry%20potter%20chapter%201.pdf"
@@ -14,6 +17,7 @@ TEST_FILE_LINK="https://www.fusd1.org/cms/lib/AZ01001113/Centricity/Domain/1385/
 # Prompt user for the number of nodes
 read -p "Enter the number of nodes you want to start: " NUM_NODES
 read -p "Enter your python command (ex: python3, py, python): " PYTHON
+read -p "Enter your machine environment (ex: mac, windows, linux):  " ENV
 
 # Check if the input is valid
 if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]]; then
@@ -49,7 +53,9 @@ run_file_server() {
         fi
 
         # Execute Python script with provided arguments
-        # "$PYTHON" FileServer.py --port="$PORT" --base_dir="$DIR" &
+        if [ "$ENV" = "windows"] then 
+            # start "" "C:\Program Files\Git\bin\bash.exe" --login -i -c "python FileServer.py"
+        fi
 
     done
 }

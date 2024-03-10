@@ -324,15 +324,12 @@ class PeerNetwork:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run a file server.')
-    parser.add_argument('--base_dir', type=str, required=True,
+    parser.add_argument('--mode', type=str, default="normal", required=False,
+                        help='The mode to run the server (normal/debug/test).')
+    parser.add_argument('--base_dir', type=str, default="files/", required=False,
                         help='The base directory from which to serve files.')
-    parser.add_argument('--port', type=int, required=True,
-                        help='The port on which the server will run.')
     args = parser.parse_args()
     base_directory = args.base_dir
-    server_port = args.port
-
-    mode = "test" 
-
-    peer_network = PeerNetwork(base_directory, mode, server_port=server_port)
+    mode = args.mode
+    peer_network = PeerNetwork(base_directory, mode)
     peer_network.run()
