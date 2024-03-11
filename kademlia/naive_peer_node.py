@@ -4,7 +4,7 @@ import aioconsole
 import file_store
 import file_server
 import file_download
-from kademlia.network import Server
+import socket
 from utils import serialize, deserialize, get_internal_ip
 
 
@@ -15,58 +15,94 @@ class UserExit(Exception):
     pass
 
 class PeerNetwork:
-    def __init__(self, base_directory, kademlia_port=9001, server_port=8000, bootstrap_addr=("0.0.0.0", 9000), interval=5):
+    def __init__(self, base_directory, port=9000, server_port=8000, broadcast_port=12346, timeout=1):
         self.base_directory = base_directory
         self.ip = get_internal_ip()
-        self.port = kademlia_port
-        self.interval = interval
+        self.port = port
+        self.timeout = timeout
         self.file_store = file_store.FileStore(base_directory)
         self.debug = False
-        self.kademlia_server = Server()
         self.file_server = file_server.FileServer(self.file_store, self.ip, server_port)
+        self.broadcast_port = broadcast_port
+        self.file_responses = {} # temporary storage for file responses
 
-    async def init_kademlia(self, boostrap_addr):
-        await self.kademlia_server.listen(self.port)
-        await self.kademlia_server.bootstrap([boostrap_addr])
+    def broadcast(self, message):
+        # Send a broadcast message to the network
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(message, ('<broadcast>', self.broadcast_port))
+        sock.close()
 
-    async def share_files(self):
-        file_index = await self.find_hash("index:0")
-        if not file_index:
-            file_index = {}
+    def send_message(self, message, addr):
+        # Send a message to a specific address
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(message, addr)
+        sock.close()
+
+    async def request_file(self, file_hash):
+        self.file_responses[file_hash] = None
+        msg = serialize({"type": "request", "file_hash": file_hash, "addr": f"{self.ip}:{self.port}"})
+        self.broadcast(msg)
+        await asyncio.sleep(self.timeout)
+        if file_hash == 'index:0':
+            index = {}
+            for file_hash, file in self.file_responses.items():
+                if file:
+                    index[file_hash] = file['file_name']
+            return index
+        return self.file_responses.pop(file_hash, None)
+
+    async def listen(self, port):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.bind(('', port))
+
+        sock.setblocking(False)
+        while True:
+            try:
+                data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024 * 8)
+                message = deserialize(data)
+                if message['addr'] == f"{self.ip}:{self.port}":
+                    continue
+                if message['type'] == 'request':
+                    await self.handle_file_request(message, addr)
+                if message['type'] == 'response':
+                    self.handle_file_response(message)
+            except BlockingIOError:
+                await asyncio.sleep(0.1)
+
+    async def handle_file_request(self, message, addr):
+        file_hash = message['file_hash']
+        message_addr_parts = message['addr'].split(':')
+        message_addr = (message_addr_parts[0], int(message_addr_parts[1]))
+        if file_hash == 'index:0':
+            for file_hash, file in self.file_store.files.items():
+                response = {"type": "response", "file_hash": file.hash(), "file": file.metadata(), "addr": f"{self.ip}:{self.file_server.port}"}
+                self.send_message(serialize(response), message_addr)
         else:
-            file_index = deserialize(file_index)
-        for file_hash, file in self.file_store.files.items():
-            if file_hash not in file_index:
-                file_index[file_hash] = file.file_name
-            if not await self.find_hash(file_hash):
-                await self.kademlia_server.set(file_hash, file.metadata(serialized=True))
-            share_chunk_coroutines = []
-            for chunk in file.chunks.values():
-                share_chunk_coroutines.append(self.share_chunk(chunk.chunk_hash))
-            await asyncio.gather(*share_chunk_coroutines)
-        await self.kademlia_server.set("index:0", serialize(file_index))
+            file = self.file_store.get_file(file_hash)
+            if file:
+                response = {"type": "response", "file_hash": file.hash(), "file": file.metadata(), "addr": f"{self.ip}:{self.file_server.port}"}
+                self.send_message(serialize(response), message_addr)
 
-    async def share_chunk(self, chunk_hash):
-        chunk_data = await self.kademlia_server.get(chunk_hash)
-        if chunk_data:
-            chunk = deserialize(chunk_data)
-            peers = set(chunk['peers'])
-            peers.add(f"{self.ip}:{self.file_server.port}")
-            chunk['peers'] = list(peers)
+    def handle_file_response(self, message):
+        file = message['file']
+        addr = message['addr']
+        file_hash = message['file_hash']
+        file['peers'] = [addr]
+        if not self.file_responses.get(file_hash):
+            self.file_responses[file_hash] = file
         else:
-            chunk = {"peers": [f"{self.ip}:{self.file_server.port}"]}
-        await self.kademlia_server.set(chunk_hash, serialize(chunk))
+            self.file_responses[file_hash]['peers'].append(addr)
 
     async def find_hash(self, file_hash):
-        return await self.kademlia_server.get(file_hash)
+        return await self.request_file(file_hash)
 
     async def refresh_local_files(self):
         """Refreshes local files available for sharing."""
         while True:
-            if self.file_store.load_files():
-                await self.file_server.update_file_store(self.file_store)
-                await self.share_files()
-            await asyncio.sleep(self.interval)
+            self.file_store.load_files()
+            await asyncio.sleep(self.timeout)
 
     async def download_file(self, file_hash):
         if not file_hash.startswith('file:'):
@@ -78,31 +114,18 @@ class PeerNetwork:
         file = await self.find_hash(file_hash)
         if file:
             chunks = []
-            file_metadata = deserialize(file)
+            file_metadata = file
             file_metadata['file_hash'] = file_hash
             for chunk in file_metadata['chunks']:
                 chunk_hash = chunk['chunk_hash']
-                chunk_data = await self.kademlia_server.get(chunk_hash)
-                if chunk_data:
-                    chunk_metadata = deserialize(chunk_data)
-                    chunk_peers = [x for x in chunk_metadata['peers'][0:MAX_PEERS] if x != f"{self.ip}:{self.file_server.port}"]
-                    if len(chunk_peers) == 0:
-                        await aioconsole.aprint(f"No peers found for chunk {chunk_hash}. Aborting download...")
-                        return
-                    chunk['peers'] = chunk_peers
-                    chunks.append(chunk)
+                chunk['peers'] = file_metadata['peers']
+                if len(chunk['peers']) == 0:
+                    await aioconsole.aprint(f"No peers found for chunk {chunk_hash}. Aborting download...")
+                    return
+                chunks.append(chunk)
             downloader = file_download.FileDownloader(self.base_directory, file_metadata, chunks)
             status, failed_peers = await downloader.download_file()
-            # Remove failed peers from chunk metadata
-            # for chunk_hash, peers in failed_peers:
-            #     chunk_data = await self.kademlia_server.get(chunk_hash)
-            #     if chunk_data:
-            #         chunk_metadata = deserialize(chunk_data)
-            #         chunk_peers = chunk_metadata['peers']
-            #         chunk_peers = list(set(chunk_peers) - set(peers))
-            #         chunk_metadata['peers'] = chunk_peers
-            #         await self.kademlia_server.set(chunk_hash, serialize(chunk_metadata))
-            # return status
+            return status
         return False
 
     async def display_help(self):
@@ -126,7 +149,6 @@ class PeerNetwork:
             await aioconsole.aprint(f"  {file_name:16} {file_hash}")
 
     async def process_user_input(self):
-
         await asyncio.sleep(1)
         while True:
             command = await aioconsole.ainput("> ")
@@ -140,13 +162,10 @@ class PeerNetwork:
                 await self.download_file(requested_file)
             elif command.startswith("find ") or command.startswith("f "):
                 requested_hash = command.split(" ")[1]
-                result = await self.find_hash(requested_hash)
-                if result:
-                    data = deserialize(result)
+                data = await self.find_hash(requested_hash)
+                if data:
                     if requested_hash.startswith('file:'):
                         await aioconsole.aprint(f"Discovered file: {data}")
-                    elif requested_hash.startswith('chunk:'):
-                        await aioconsole.aprint(f"Discovered chunk: {data}")
                     elif requested_hash == 'index:0':
                         await self.display_remote_files(data)
                 else:
@@ -156,17 +175,21 @@ class PeerNetwork:
                 for file in self.file_store.files.values():
                     await aioconsole.aprint(f"  {file}")
             elif command == "ls remote":
-                await self.display_remote_files(deserialize(await self.find_hash("index:0")))
+                await self.display_remote_files(await self.find_hash("index:0"))
             else:
                 await aioconsole.aprint("Command not found. Type 'help' for a list of commands.")
             await aioconsole.aprint("")
         raise UserExit("User exited program.")
 
-    async def run(self, bootstrap_addr):
+    async def run(self):
         """Starts the peer network services."""
-        await self.init_kademlia(bootstrap_addr)
         await self.file_server.run()
-        await asyncio.gather(self.refresh_local_files(), self.process_user_input())
+        await asyncio.gather(
+            self.refresh_local_files(),
+            self.process_user_input(),
+            self.listen(self.broadcast_port),
+            self.listen(self.port)
+        )
 
     async def terminate(self):
         await self.file_server.terminate()
@@ -176,37 +199,36 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Start a peer node and share files.")
     parser.add_argument("--n", type=int, help="Node number; will create node with kademlia port 900x and server port "
                                               "800x using dir ../files/x.")
-    parser.add_argument("--kademlia_port", type=int, help="The port for node to listen on.")
+    parser.add_argument("--port", type=int, help="The port for node to listen on.")
     parser.add_argument("--server_port", type=int, help="The port for file server to listen on.")
-    parser.add_argument("--bootstrap", type=str, help="The address of the bootstrap node.")
+    parser.add_argument("--broadcast_port", type=int, help="The port to broadcast on.")
     parser.add_argument("--dir", type=str, help="The directory to share files from.")
     base_directory = '../files/'
     bootstrap_node = "0.0.0.0:9000"
-    kademlia_port = 9001
+    port = 9001
     server_port = 8001
+    broadcast_port = 12346
     args = parser.parse_args()
     if args.n and args.n > 0:
         base_directory = f'../files/{args.n}/'
-        kademlia_port = 9000 + args.n
+        port = 9000 + args.n
         server_port = 8000 + args.n
     if args.dir:
         base_directory = args.dir
-    if args.kademlia_port:
-        kademlia_port = args.kademlia_port
+    if args.port:
+        port = args.kademlia_port
     if args.server_port:
         server_port = args.server_port
-    if args.bootstrap:
-        bootstrap_node = args.bootstrap
-    bootstrap_ip, port = bootstrap_node.split(":")
-    bootstrap_addr = (bootstrap_ip, int(port))
+    if args.broadcast_port:
+        broadcast_port = args.broadcast_port
     peer_network = PeerNetwork(
         base_directory=base_directory,
-        kademlia_port=kademlia_port,
+        port=port,
         server_port=server_port,
-        bootstrap_addr=bootstrap_addr
+        broadcast_port=broadcast_port
     )
     try:
-        asyncio.run(peer_network.run(bootstrap_addr))
+        asyncio.run(peer_network.run())
     except (KeyboardInterrupt, UserExit) as e:
         print("Shutdown requested...exiting")
     finally:
