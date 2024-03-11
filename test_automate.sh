@@ -1,19 +1,30 @@
 #!/bin/bash
 
+
+""" This script requires you to have as many bash terminal opens as needed to run the number of nodes in the
+simulation. 
+
+For example, if you want to simulate 4 programs running, open up 4 bash terminals and find each of their
+PID by typing cmd 'echo $$' into each bash terminal
+"""
+
+
 # Redirect stdout and stderr to the log file
 exec > >(tee -a ${LOG_FILE} )
 exec 2>&1
 
 LOG_FILE="output.log"
-SERVER_BASE_PORT=12345
+SERVER_BASE_PORT=1
 BASE_DIR="./files"
 TEST_FILE="test.pdf"
 TEST_FILE_LINK="https://www.fusd1.org/cms/lib/AZ01001113/Centricity/Domain/1385/harry%20potter%20chapter%201.pdf"
 
 
+
 # Prompt user for the number of nodes
 read -p "Enter the number of nodes you want to start: " NUM_NODES
 read -p "Enter your python command (ex: python3, py, python): " PYTHON
+read -p "Enter your machine environment (ex: mac, windows, linux):  " ENV
 
 # Check if the input is valid
 if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]]; then
@@ -49,8 +60,11 @@ run_file_server() {
         fi
 
         # Execute Python script with provided arguments
-        # "$PYTHON" FileServer.py --port="$PORT" --base_dir="$DIR" &
-
+        if [ "$ENV" = "windows"] then 
+            # start "" "C:\Program Files\Git\bin\bash.exe" --login -i -c "python FileServer.py"
+        else
+            # bash --login -i -c "python FileServer.py"
+        fi
     done
 }
 
@@ -70,6 +84,3 @@ if [ $? -eq 0 ]; then
 else
     echo "Download failed."
 fi
-
-
-
