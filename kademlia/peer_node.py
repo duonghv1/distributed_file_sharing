@@ -38,7 +38,7 @@ class PeerNetwork:
         for file_hash, file in self.file_store.files.items():
             if file_hash not in file_index:
                 file_index[file_hash] = file.file_name
-            if not self.find_hash(file_hash):
+            if not await self.find_hash(file_hash):
                 await self.kademlia_server.set(file_hash, file.metadata(serialized=True))
             share_chunk_coroutines = []
             for chunk in file.chunks.values():
