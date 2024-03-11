@@ -1,14 +1,10 @@
 import asyncio
 import argparse
 import aioconsole
-import file_store
-import file_server
-import file_download
 import socket
-from utils import serialize, deserialize, get_internal_ip
+from src import file_store, file_server, file_download
+from src.utils import serialize, deserialize, get_internal_ip
 
-
-PUBLIC_IP_GETTER = "https://checkip.amazonaws.com"
 MAX_PEERS = 30
 
 class UserExit(Exception):

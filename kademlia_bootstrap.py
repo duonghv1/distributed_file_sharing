@@ -1,8 +1,7 @@
 import asyncio
 import logging
-import socket
 from kademlia.network import Server
-from utils import get_internal_ip
+from src.utils import get_internal_ip
 
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
