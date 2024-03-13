@@ -11,11 +11,12 @@ class UserExit(Exception):
     pass
 
 class PeerNetwork:
-    def __init__(self, base_directory, port=9000, server_port=8000, broadcast_port=12346, timeout=1):
+    def __init__(self, base_directory, port=9000, server_port=8000, broadcast_port=12346, timeout=1, cmd_line=True):
         self.base_directory = base_directory
         self.ip = get_internal_ip()
         self.port = port
         self.timeout = timeout
+        self.cmd_line = cmd_line
         self.file_store = file_store.FileStore(base_directory)
         self.debug = False
         self.file_server = file_server.FileServer(self.file_store, self.ip, server_port)
@@ -180,12 +181,10 @@ class PeerNetwork:
     async def run(self):
         """Starts the peer network services."""
         await self.file_server.run()
-        await asyncio.gather(
-            self.refresh_local_files(),
-            self.process_user_input(),
-            self.listen(self.broadcast_port),
-            self.listen(self.port)
-        )
+        async_tasks = [self.refresh_local_files(), self.listen(self.broadcast_port), self.listen(self.port)]
+        if self.cmd_line:
+            async_tasks.append(self.process_user_input())
+        await asyncio.gather(*async_tasks)
 
     async def terminate(self):
         await self.file_server.terminate()
@@ -199,14 +198,14 @@ if __name__ == "__main__":
     parser.add_argument("--server_port", type=int, help="The port for file server to listen on.")
     parser.add_argument("--broadcast_port", type=int, help="The port to broadcast on.")
     parser.add_argument("--dir", type=str, help="The directory to share files from.")
-    base_directory = '../files/'
+    base_directory = './files/'
     bootstrap_node = "0.0.0.0:9000"
     port = 9001
     server_port = 8001
     broadcast_port = 12346
     args = parser.parse_args()
     if args.n and args.n > 0:
-        base_directory = f'../files/{args.n}/'
+        base_directory = f'./files/{args.n}/'
         port = 9000 + args.n
         server_port = 8000 + args.n
     if args.dir:

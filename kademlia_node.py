@@ -177,13 +177,13 @@ if __name__ == "__main__":
     parser.add_argument("--server_port", type=int, help="The port for file server to listen on.")
     parser.add_argument("--bootstrap", type=str, help="The address of the bootstrap node.")
     parser.add_argument("--dir", type=str, help="The directory to share files from.")
-    base_directory = '../files/'
+    base_directory = '/files/'
     bootstrap_node = "0.0.0.0:9000"
     kademlia_port = 9001
     server_port = 8001
     args = parser.parse_args()
     if args.n and args.n > 0:
-        base_directory = f'../files/{args.n}/'
+        base_directory = f'./files/{args.n}/'
         kademlia_port = 9000 + args.n
         server_port = 8000 + args.n
     if args.dir:

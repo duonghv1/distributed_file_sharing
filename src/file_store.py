@@ -1,6 +1,6 @@
 import hashlib
 import os
-from utils import serialize
+from .utils import serialize
 
 DEFAULT_CHUNK_SIZE = 8192
 MAX_CHUNKS = 30

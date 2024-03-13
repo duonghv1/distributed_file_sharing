@@ -1,7 +1,7 @@
 import aiohttp.web
 import aioconsole
 import asyncio
-from file_store import FileStore, File
+from .file_store import FileStore, File
 
 DOWNLOAD_RATE = 1024 * 1024 * 10 # 10MB/s
 

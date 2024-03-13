@@ -5,7 +5,7 @@ import os
 import time
 import hashlib
 from aioconsole import aprint
-from file_store import File, Chunk
+from .file_store import File, Chunk
 
 MAX_ATTEMPTS = 3
 
