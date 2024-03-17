@@ -40,7 +40,7 @@ class FileDownloader:
                 except Exception as e:
                     failed_peers.add(peer)
                     attempt += 1
-                    asyncio.sleep(0.5)
+                    await asyncio.sleep(0.5)
             try:
                 async with session.get(url, headers=headers) as response:
                     if response.status == 206:

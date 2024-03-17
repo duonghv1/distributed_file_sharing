@@ -72,6 +72,7 @@ class PeerNetwork:
         file_hash = message['file_hash']
         message_addr_parts = message['addr'].split(':')
         message_addr = (message_addr_parts[0], int(message_addr_parts[1]))
+        print(message)
         if file_hash == 'index:0':
             for file_hash, file in self.file_store.files.items():
                 response = {"type": "response", "file_hash": file.hash(), "file": file.metadata(), "addr": f"{self.ip}:{self.file_server.port}"}
@@ -211,7 +212,7 @@ if __name__ == "__main__":
     if args.dir:
         base_directory = args.dir
     if args.port:
-        port = args.kademlia_port
+        port = args.port
     if args.server_port:
         server_port = args.server_port
     if args.broadcast_port:
