@@ -3,3 +3,5 @@ files/*
 .idea/*
 __pycache__/
 .env
+test_files/*
+test_log.txt

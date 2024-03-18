@@ -22,6 +22,7 @@ class PeerNetwork:
         self.file_server = file_server.FileServer(self.file_store, self.ip, server_port)
         self.broadcast_port = broadcast_port
         self.file_responses = {} # temporary storage for file responses
+        self.responses = 0
 
     def broadcast(self, message):
         # Send a broadcast message to the network
@@ -36,11 +37,17 @@ class PeerNetwork:
         sock.sendto(message, addr)
         sock.close()
 
-    async def request_file(self, file_hash):
+    async def request_file(self, file_hash, required_responses=0):
         self.file_responses[file_hash] = None
+        self.responses = 0
         msg = serialize({"type": "request", "file_hash": file_hash, "addr": f"{self.ip}:{self.port}"})
         self.broadcast(msg)
-        await asyncio.sleep(self.timeout)
+        if required_responses > 0:
+            # Wait until we have the required number of responses
+            while self.responses < required_responses:
+                await asyncio.sleep(0.01)
+        else:
+            await asyncio.sleep(self.timeout)
         if file_hash == 'index:0':
             index = {}
             for file_hash, file in self.file_responses.items():
@@ -84,6 +91,7 @@ class PeerNetwork:
                 self.send_message(serialize(response), message_addr)
 
     def handle_file_response(self, message):
+        self.responses += 1
         file = message['file']
         addr = message['addr']
         file_hash = message['file_hash']
@@ -93,8 +101,8 @@ class PeerNetwork:
         else:
             self.file_responses[file_hash]['peers'].append(addr)
 
-    async def find_hash(self, file_hash):
-        return await self.request_file(file_hash)
+    async def find_hash(self, file_hash, required_responses=0):
+        return await self.request_file(file_hash, required_responses)
 
     async def refresh_local_files(self):
         """Refreshes local files available for sharing."""

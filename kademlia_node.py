@@ -12,19 +12,22 @@ class UserExit(Exception):
     pass
 
 class PeerNetwork:
-    def __init__(self, base_directory, kademlia_port=9001, server_port=8000, bootstrap_addr=("0.0.0.0", 9000), interval=5):
+    def __init__(self, base_directory, kademlia_port=9001, server_port=8000, bootstrap_addr=("0.0.0.0", 9000), interval=5, cmd_line=True):
         self.base_directory = base_directory
         self.ip = get_internal_ip()
         self.port = kademlia_port
+        self.bootstrap_addr = bootstrap_addr
         self.interval = interval
+        self.cmd_line = cmd_line
         self.file_store = file_store.FileStore(base_directory)
         self.debug = False
         self.kademlia_server = Server()
         self.file_server = file_server.FileServer(self.file_store, self.ip, server_port)
 
-    async def init_kademlia(self, boostrap_addr):
+    async def init_kademlia(self):
         await self.kademlia_server.listen(self.port)
-        await self.kademlia_server.bootstrap([boostrap_addr])
+        if self.bootstrap_addr:
+            await self.kademlia_server.bootstrap([self.bootstrap_addr])
 
     async def share_files(self):
         file_index = await self.find_hash("index:0")
@@ -159,11 +162,14 @@ class PeerNetwork:
             await aioconsole.aprint("")
         raise UserExit("User exited program.")
 
-    async def run(self, bootstrap_addr):
+    async def run(self):
         """Starts the peer network services."""
-        await self.init_kademlia(bootstrap_addr)
+        await self.init_kademlia()
         await self.file_server.run()
-        await asyncio.gather(self.refresh_local_files(), self.process_user_input())
+        async_tasks = [self.refresh_local_files()]
+        if self.cmd_line:
+            async_tasks.append(self.process_user_input())
+        await asyncio.gather(*async_tasks)
 
     async def terminate(self):
         await self.file_server.terminate()
