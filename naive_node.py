@@ -5,13 +5,14 @@ import socket
 from src import file_store, file_server, file_download
 from src.utils import serialize, deserialize, get_internal_ip
 
+DOWNLOAD_RATE = file_server.DOWNLOAD_RATE
 MAX_PEERS = 30
 
 class UserExit(Exception):
     pass
 
 class PeerNetwork:
-    def __init__(self, base_directory, port=9000, server_port=8000, broadcast_port=12346, timeout=1, cmd_line=True):
+    def __init__(self, base_directory, port=9000, server_port=8000, broadcast_port=12346, timeout=1, cmd_line=True, download_rate=DOWNLOAD_RATE):
         self.base_directory = base_directory
         self.ip = get_internal_ip()
         self.port = port
@@ -19,7 +20,7 @@ class PeerNetwork:
         self.cmd_line = cmd_line
         self.file_store = file_store.FileStore(base_directory)
         self.debug = False
-        self.file_server = file_server.FileServer(self.file_store, self.ip, server_port)
+        self.file_server = file_server.FileServer(self.file_store, self.ip, server_port, download_rate)
         self.broadcast_port = broadcast_port
         self.file_responses = {} # temporary storage for file responses
         self.responses = 0
@@ -79,7 +80,6 @@ class PeerNetwork:
         file_hash = message['file_hash']
         message_addr_parts = message['addr'].split(':')
         message_addr = (message_addr_parts[0], int(message_addr_parts[1]))
-        print(message)
         if file_hash == 'index:0':
             for file_hash, file in self.file_store.files.items():
                 response = {"type": "response", "file_hash": file.hash(), "file": file.metadata(), "addr": f"{self.ip}:{self.file_server.port}"}
@@ -110,14 +110,14 @@ class PeerNetwork:
             self.file_store.load_files()
             await asyncio.sleep(self.timeout)
 
-    async def download_file(self, file_hash):
+    async def download_file(self, file_hash, required_responses=0):
         if not file_hash.startswith('file:'):
             await aioconsole.aprint("Invalid file hash.")
-            return
+            return False
         if self.file_store.files.get(file_hash):
             await aioconsole.aprint("File already exists locally.")
-            return
-        file = await self.find_hash(file_hash)
+            return False
+        file = await self.find_hash(file_hash, required_responses)
         if file:
             chunks = []
             file_metadata = file
@@ -127,7 +127,7 @@ class PeerNetwork:
                 chunk['peers'] = file_metadata['peers']
                 if len(chunk['peers']) == 0:
                     await aioconsole.aprint(f"No peers found for chunk {chunk_hash}. Aborting download...")
-                    return
+                    return False
                 chunks.append(chunk)
             downloader = file_download.FileDownloader(self.base_directory, file_metadata, chunks)
             status, failed_peers = await downloader.download_file()

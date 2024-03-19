@@ -1,0 +1,73 @@
+Test Conditions:
+* Node 1 will execute operations
+* Nodes upload/download data at 100 KB/s
+
+Disclaimer:
+* Nodes are ran in a local environment where latency will virtually be 0
+
+
+Benchmarks:
+
+ls remote - retrieve files from nodes
+
+                            Node 1 Traffic                Total Traffic                
+         nodes   time       bytes_recv     bytes_sent     bytes_recv     bytes_sent    
+   Naive
+             2   0.213 sec  8.40 KB        71 B           16.98 KB       8.37 KB       
+             4   0.152 sec  24.99 KB       71 B           50.57 KB       24.97 KB      
+             8   0.153 sec  58.19 KB       71 B           117.73 KB      58.16 KB      
+            16   0.155 sec  124.58 KB      71 B           252.06 KB      124.55 KB     
+Kademlia
+             2   0.061 sec  25.38 KB       9.32 KB        69.01 KB       69.01 KB      
+             4   0.029 sec  60.16 KB       48.82 KB       455.24 KB      455.24 KB     
+             8   0.071 sec  135.73 KB      120.96 KB      2.23 MB        2.23 MB       
+            16   0.05 sec   330.17 KB      361.87 KB      12.24 MB       12.24 MB      
+
+
+find hash - search for file hash from nodes
+
+                            Node 1 Traffic                Total Traffic                
+         nodes   time       bytes_recv     bytes_sent     bytes_recv     bytes_sent    
+   Naive
+             2   0.161 sec  491 B          133 B          1.27 KB        463 B         
+             4   0.133 sec  1.12 KB        133 B          3.19 KB        1.10 KB       
+             8   0.191 sec  2.41 KB        133 B          7.03 KB        2.39 KB       
+            16   0.19 sec   4.99 KB        133 B          14.70 KB       4.96 KB       
+Kademlia
+             2   0.067 sec  25.38 KB       9.32 KB        69.01 KB       69.01 KB      
+             4   0.023 sec  60.09 KB       48.59 KB       450.54 KB      450.54 KB     
+             8   0.075 sec  132.99 KB      120.63 KB      2.07 MB        2.07 MB       
+            16   0.011 sec  330.75 KB      410.81 KB      12.38 MB       12.38 MB      
+
+
+download 100 MB file - download file from nodes
+
+                            Node 1 Traffic                Total Traffic                
+         nodes   time       bytes_recv     bytes_sent     bytes_recv     bytes_sent    
+   Naive
+             2   31.121 sec 100.43 MB      7.21 KB        100.44 MB      100.44 MB     
+             4   10.7 sec   101.24 MB      21.37 KB       101.28 MB      101.27 MB     
+             8   5.389 sec  101.19 MB      49.70 KB       101.26 MB      101.23 MB     
+            16   7.357 sec  102.12 MB      106.36 KB      102.29 MB      102.22 MB     
+Kademlia
+             2   30.975 sec 100.48 MB      31.94 KB       100.55 MB      100.55 MB     
+             4   10.547 sec 101.21 MB      96.34 KB       101.65 MB      101.65 MB     
+             8   5.18 sec   102.01 MB      244.89 KB      104.10 MB      104.10 MB     
+            16   7.552 sec  102.09 MB      724.04 KB      114.96 MB      114.96 MB    
+
+
+download 100 MB file with failures - download file from nodes with half failing after 2 sec
+
+                            Node 1 Traffic                Total Traffic                
+         nodes   time       bytes_recv     bytes_sent     bytes_recv     bytes_sent    
+   Naive
+             2   3.726 sec  30.01 MB       7.21 KB        30.02 MB       30.02 MB.   *failed
+             4   15.774 sec 160.50 MB      35.07 KB       160.55 MB      160.54 MB
+	     8   10.108 sec 101.20 MB      58.40 KB       101.29 MB      101.26 MB
+            16   9.649 sec  100.64 MB      121.44 KB      100.82 MB      100.76 MB
+Kademlia
+             2   3.742 sec  30.03 MB       16.39 KB       30.07 MB       30.06 MB.   *failed
+             4   15.786 sec 161.46 MB      103.64 KB      161.78 MB      161.78 MB
+             8   11.81 sec  101.62 MB      261.51 KB      103.26 MB      103.33 MB
+            16   10.822 sec 101.13 MB      545.18 KB      109.80 MB      110.18 MB
+

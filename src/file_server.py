@@ -3,16 +3,16 @@ import aioconsole
 import asyncio
 from .file_store import FileStore, File
 
-DOWNLOAD_RATE = 1024 * 1024 * 10 # 10MB/s
+DOWNLOAD_RATE = 1024 * 1024 * 10  # 10MB/s
 
 class FileServer:
-    def __init__(self, file_store: FileStore, host, port):
+    def __init__(self, file_store: FileStore, host, port, download_rate=DOWNLOAD_RATE):
         self.file_store = file_store
         self.host = host
         self.port = port
         self.server = aiohttp.web.Application()
         self.create_routes()
-        self.download_rate = DOWNLOAD_RATE
+        self.download_rate = download_rate
         self.runner = None
 
     def create_routes(self):

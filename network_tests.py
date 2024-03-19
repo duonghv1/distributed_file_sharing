@@ -38,7 +38,7 @@ def start_async_node_process(node, command_queue, result_queue, startup_time):
     loop.close()
 
 
-async def launch_nodes(number_of_nodes, base_directory='./test_files/', base_port=9000, base_server_port=8000, node_type='Naive'):
+async def launch_nodes(number_of_nodes, base_directory='./test_files/', base_port=9000, base_server_port=8000, node_type='Naive', download_rate=1024*100):
     """
     Create and runs a number of peer nodes from the naive network.
     """
@@ -49,9 +49,9 @@ async def launch_nodes(number_of_nodes, base_directory='./test_files/', base_por
         if not os.path.exists(node_dir):
             os.makedirs(node_dir, exist_ok=True)
         if node_type == "naive":
-            node = naive_node.PeerNetwork(node_dir, base_port + i, base_server_port + i, 33333, cmd_line=False)
+            node = naive_node.PeerNetwork(node_dir, base_port + i, base_server_port + i, 33333, cmd_line=False, download_rate=download_rate)
         elif node_type == "kademlia":
-            node = kademlia_node.PeerNetwork(node_dir, base_port + i, base_server_port + i, ('0.0.0.0', 9001), cmd_line=False)
+            node = kademlia_node.PeerNetwork(node_dir, base_port + i, base_server_port + i, ('0.0.0.0', 9001), cmd_line=False, download_rate=download_rate)
         else:
             raise ValueError("Invalid node type")
         command_queue = multiprocessing.Queue()
@@ -63,12 +63,16 @@ async def launch_nodes(number_of_nodes, base_directory='./test_files/', base_por
     return nodes, queues
 
 
-async def terminate_nodes(nodes):
+async def terminate_nodes(nodes, delay=0):
+    await asyncio.sleep(delay)
+    print(f"Terminating {len(nodes)} node(s)...")
     for proc in nodes:
-        proc.terminate()
+        if proc:
+            proc.terminate()
     await asyncio.sleep(1)
     for proc in nodes:
-        proc.join()
+        if proc:
+            proc.join()
 
 
 async def call_function(queue, func, *args):
@@ -101,11 +105,11 @@ async def run_nettop(pids, n_samples, node_type):
             line_num += 1
     except asyncio.CancelledError:
         pass
-    if node_type == "naive":
-        return output[-len(pids)*4:]
-    elif node_type == "kademlia":
-        return output[-len(pids)*3:]
-    raise ValueError("Invalid node type")
+    # for i in range(len(output)-1, 0, -1):
+    #     if output[i].startswith('Python.' + str(pids[0])):
+    #         start = i
+    #         break
+    return output
 
 
 def parse_nettop_output(output, pids):
@@ -114,8 +118,19 @@ def parse_nettop_output(output, pids):
     pids_to_nodes = {str(pid): pids.index(pid)+1 for pid in sorted(pids)}
     traffic_data = {}
     total_bytes = {'bytes_in': 0, 'bytes_out': 0}
+    cleaned_output = {}
+    proc_name = None
     for line in output:
-        data = {}
+        name, bytes_in, bytes_out, _ = line.split(',')
+        if not name:
+            continue
+        if name.startswith('Python'):
+            proc_name = name
+            cleaned_output[proc_name] = [line]
+        else:
+            cleaned_output[proc_name].append(line)
+    output = [line for name in sorted(cleaned_output) for line in cleaned_output[name]]
+    for line in output:
         name, bytes_in, bytes_out, _ = line.split(',')
         if not bytes_in:
             bytes_in = 0
@@ -150,7 +165,7 @@ def init_files(n_files, base_directory='./test_files/'):
         if not os.path.exists(dir):
             os.makedirs(dir, exist_ok=True)
         for file_name in os.listdir(dir):
-            if file_name not in ['A', 'B', 'C']:
+            if file_name not in ['A', 'B', 'C'] or i == 1:
                 os.remove(os.path.join(dir, file_name))
         if i != 1:
             if not os.path.exists(os.path.join(dir, 'A')):
@@ -230,8 +245,10 @@ async def run_tests(node_sizes, func, nettop_samples=5):
     stats = []
     for n in node_sizes:
         stats.append(await func(n, "naive", nettop_samples))
+        await asyncio.sleep(5)
     for n in node_sizes:
         stats.append(await func(n, "kademlia", nettop_samples))
+        await asyncio.sleep(5)
     return format_stats(stats)
 
 
@@ -260,7 +277,7 @@ async def test_find_hash(n_nodes, node_type, nettop_samples):
     print("Executing find...")
     start_time = time.time()
     if node_type == "naive":
-        print(await call_function(queues[0], "find_hash", test.files['A'], n_nodes-1))
+        await call_function(queues[0], "find_hash", test.files['A'], n_nodes-1)
     elif node_type == "kademlia":
         await call_function(queues[0], "find_hash", test.files['A'])
     time_elapsed = time.time() - start_time
@@ -269,17 +286,40 @@ async def test_find_hash(n_nodes, node_type, nettop_samples):
     return node_type, n_nodes, time_elapsed, traffic_data
 
 
+async def test_download(n_nodes, node_type, nettop_samples):
+    """
+    Test download of file C (100 MB) from remote nodes
+    Nodes upload/download files at 100 KB/s
+    """
+    test = TestRunner(n_nodes, node_type, nettop_samples)
+    queues = await test.start()
+    await asyncio.sleep(5)
+
+    print("Executing download...")
+    start_time = time.time()
+    if node_type == "naive":
+        await call_function(queues[0], "download_file", test.files['C'], n_nodes-1)
+    elif node_type == "kademlia":
+        await call_function(queues[0], "download_file", test.files['C'])
+    time_elapsed = time.time() - start_time
+
+    traffic_data = await test.terminate()
+    return node_type, n_nodes, time_elapsed, traffic_data
+
+
 def main():
     open('test_log.txt', 'w').close()  # Clear log
-    nodes_sizes = [2,4,10]
+    nodes_sizes = [2, 4, 8, 16]
     log("Benchmarks:")
     log("\nls remote - retrieve files from remote nodes")
     stats = asyncio.run(run_tests(nodes_sizes, test_ls_remote, 10))
     log(stats)
-    log("\nfind - search for file hash from remote nodes")
+    log("\nfind hash - search for file hash from remote nodes")
     stats = asyncio.run(run_tests(nodes_sizes, test_find_hash, 10))
     log(stats)
-
+    log("\ndownload 100 MB file - download file from remote nodes at 100 KB/s")
+    stats = asyncio.run(run_tests(nodes_sizes, test_download, 40))
+    log(stats)
 
 
 if __name__ == "__main__":

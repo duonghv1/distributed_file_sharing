@@ -5,14 +5,14 @@ from kademlia.network import Server
 from src import file_store, file_server, file_download
 from src.utils import serialize, deserialize, get_internal_ip
 
-
+DOWNLOAD_RATE = file_server.DOWNLOAD_RATE
 MAX_PEERS = 30
 
 class UserExit(Exception):
     pass
 
 class PeerNetwork:
-    def __init__(self, base_directory, kademlia_port=9001, server_port=8000, bootstrap_addr=("0.0.0.0", 9000), interval=5, cmd_line=True):
+    def __init__(self, base_directory, kademlia_port=9001, server_port=8000, bootstrap_addr=("0.0.0.0", 9000), interval=5, cmd_line=True, download_rate=DOWNLOAD_RATE):
         self.base_directory = base_directory
         self.ip = get_internal_ip()
         self.port = kademlia_port
@@ -22,7 +22,7 @@ class PeerNetwork:
         self.file_store = file_store.FileStore(base_directory)
         self.debug = False
         self.kademlia_server = Server()
-        self.file_server = file_server.FileServer(self.file_store, self.ip, server_port)
+        self.file_server = file_server.FileServer(self.file_store, self.ip, server_port, download_rate)
 
     async def init_kademlia(self):
         await self.kademlia_server.listen(self.port)
@@ -88,11 +88,12 @@ class PeerNetwork:
                     chunk_peers = [x for x in chunk_metadata['peers'][0:MAX_PEERS] if x != f"{self.ip}:{self.file_server.port}"]
                     if len(chunk_peers) == 0:
                         await aioconsole.aprint(f"No peers found for chunk {chunk_hash}. Aborting download...")
-                        return
+                        return False
                     chunk['peers'] = chunk_peers
                     chunks.append(chunk)
             downloader = file_download.FileDownloader(self.base_directory, file_metadata, chunks)
             status, failed_peers = await downloader.download_file()
+            return status
             # Remove failed peers from chunk metadata
             # for chunk_hash, peers in failed_peers:
             #     chunk_data = await self.kademlia_server.get(chunk_hash)
