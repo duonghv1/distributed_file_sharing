@@ -180,7 +180,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Start a peer node and share files.")
     parser.add_argument("--n", type=int, help="Node number; will create node with kademlia port 900x and server port "
                                               "800x using dir ../files/x.")
-    parser.add_argument("--kademlia_port", type=int, help="The port for node to listen on.")
+    parser.add_argument("--port", type=int, help="The port for node to listen on.")
     parser.add_argument("--server_port", type=int, help="The port for file server to listen on.")
     parser.add_argument("--bootstrap", type=str, help="The address of the bootstrap node.")
     parser.add_argument("--dir", type=str, help="The directory to share files from.")
@@ -195,8 +195,8 @@ if __name__ == "__main__":
         server_port = 8000 + args.n
     if args.dir:
         base_directory = args.dir
-    if args.kademlia_port:
-        kademlia_port = args.kademlia_port
+    if args.port:
+        kademlia_port = args.port
     if args.server_port:
         server_port = args.server_port
     if args.bootstrap:
@@ -210,7 +210,7 @@ if __name__ == "__main__":
         bootstrap_addr=bootstrap_addr
     )
     try:
-        asyncio.run(peer_network.run(bootstrap_addr))
+        asyncio.run(peer_network.run())
     except (KeyboardInterrupt, UserExit) as e:
         print("Shutdown requested...exiting")
     finally:
