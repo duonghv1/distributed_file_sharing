@@ -12,10 +12,10 @@ The Kademlia network requires two nodes to start. A boostrap node can be started
 ```
 python kademlia_bootstrap.py
 ```
-This starts a Kademlia node with IP and port `192.168.1.1:9000`<br>
+This starts a Kademlia node with IP and port `0.0.0.0:9000`<br>
 A Kademlia node can join an existing network via a bootstrap address with the command:
 ```
-python kademlia_node.py --port 8001 --server_port 9001 --bootstrap 192.168.1.1:9000 --dir ./files/
+python kademlia_node.py --port 8001 --server_port 9001 --bootstrap 0.0.0.0:9000 --dir ./files/
 ```
 #### Args
 - `port` specifies the port to node is running on
